@@ -1,0 +1,9 @@
+-r base.txt
+pytest
+pytest-asyncio
+mypy
+bandit
+black
+isort
+coverage
+locust
