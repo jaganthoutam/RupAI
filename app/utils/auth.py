@@ -16,7 +16,7 @@ class JWTBearer(HTTPBearer):
         credentials: HTTPAuthorizationCredentials = await super().__call__(request)
         token = credentials.credentials
         try:
-            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
             return payload.get("sub")
         except jwt.PyJWTError as exc:
             raise HTTPException(status_code=403, detail="invalid token") from exc

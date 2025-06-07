@@ -1,2 +1,15 @@
 -r base.txt
-gunicorn
+
+# Production WSGI Server
+gunicorn>=21.2.0
+
+# Production Monitoring
+sentry-sdk[fastapi]>=1.38.0
+datadog>=0.48.0
+
+# Performance Optimization
+orjson>=3.9.10
+
+# Deployment & Infrastructure
+kubernetes>=28.1.0
+docker>=6.1.3

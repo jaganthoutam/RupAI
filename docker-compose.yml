@@ -1,31 +1,227 @@
-version: '3.9'
 services:
-  db:
+  # PostgreSQL Database
+  postgres:
     image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: payments
+    container_name: mcp-payments-postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
+    environment:
+      - POSTGRES_DB=payments_db
+      - POSTGRES_USER=payments
+      - POSTGRES_PASSWORD=payments_secure_pass
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments -d payments_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Message Broker
   redis:
     image: redis:7-alpine
+    container_name: mcp-payments-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-  app:
-    build: .
-    environment:
-      DATABASE_URL: postgresql+asyncpg://user:pass@db:5432/payments
-      REDIS_URL: redis://redis:6379/0
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Main MCP Payments Backend
+  mcp-payments:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: mcp-payments-backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
+      - "9090:9090"  # Prometheus metrics
+    environment:
+      - ENV=${ENV:-development}
+      - DEBUG=${DEBUG:-true}
+      - ENABLE_AUTHENTICATION=${ENABLE_AUTHENTICATION:-false}
+      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-32-chars}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-change-in-production-32-chars}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+      - ENABLE_ANALYTICS=${ENABLE_ANALYTICS:-true}
+      - ENABLE_AUDIT_LOGGING=${ENABLE_AUDIT_LOGGING:-true}
+      - ENABLE_RATE_LIMITING=${ENABLE_RATE_LIMITING:-true}
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
     depends_on:
-      - db
-      - redis
-      - rabbitmq
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Development: Mount source code for live reload
+      - ./app:/app/app:rw
+      - ./logs:/app/logs:rw
+      - ./data/uploads:/app/uploads:rw
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: >
+      sh -c "
+        if [ \"$$ENV\" = \"development\" ]; then
+          echo 'Starting in development mode with auto-reload...'
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+        else
+          echo 'Starting in production mode...'
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+        fi
+      "
+
+  # Celery Worker for Background Tasks
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile  
+      target: ${BUILD_TARGET:-development}
+    container_name: mcp-payments-celery-worker
+    restart: unless-stopped
+    command: >
+      sh -c "
+        if [ \"$$ENV\" = \"development\" ]; then
+          echo 'Starting Celery worker in development mode with auto-reload...'
+          watchmedo auto-restart --directory=/app/app --pattern='*.py' --recursive -- celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+        else
+          echo 'Starting Celery worker in production mode...'
+          celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
+        fi
+      "
+    environment:
+      - ENV=${ENV:-development}
+      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Development: Mount source code for live reload
+      - ./app:/app/app:rw
+      - ./logs:/app/logs:rw
+    networks:
+      - payments-network
+
+  # Celery Beat Scheduler
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: mcp-payments-celery-beat
+    restart: unless-stopped
+    command: >
+      sh -c "
+        if [ \"$$ENV\" = \"development\" ]; then
+          echo 'Starting Celery beat in development mode...'
+          celery -A app.tasks.celery_app beat --loglevel=info
+        else
+          echo 'Starting Celery beat in production mode...'
+          celery -A app.tasks.celery_app beat --loglevel=info
+        fi
+      "
+    environment:
+      - ENV=${ENV:-development}
+      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Development: Mount source code for live reload
+      - ./app:/app/app:rw
+      - ./logs:/app/logs:rw
+    networks:
+      - payments-network
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: mcp-payments-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
+      - REACT_APP_ENVIRONMENT=${REACT_APP_ENVIRONMENT:-development}
+      - CHOKIDAR_USEPOLLING=true  # For Windows/Docker file watching
+    depends_on:
+      - mcp-payments
+    volumes:
+      # Development: Mount source code for live reload
+      - ./frontend/src:/app/src:rw
+      - ./frontend/public:/app/public:rw
+      - ./frontend/package.json:/app/package.json:ro
+      - ./frontend/package-lock.json:/app/package-lock.json:ro
+      # Exclude node_modules to avoid conflicts
+      - /app/node_modules
+    networks:
+      - payments-network
+    command: >
+      sh -c "
+        if [ \"$$NODE_ENV\" = \"development\" ]; then
+          echo 'Starting frontend in development mode with hot reload...'
+          npm start
+        else
+          echo 'Starting frontend in production mode...'
+          npm run build && serve -s build -l 3000
+        fi
+      "
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  payments-network:
+    driver: bridge
+    name: mcp-payments-network

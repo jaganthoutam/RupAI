@@ -1,0 +1,107 @@
+# Docker Compose Override for Development
+# This file is automatically loaded by docker-compose and provides development-specific settings
+
+services:
+  mcp-payments:
+    build:
+      target: development
+    environment:
+      - ENV=development
+      - DEBUG=true
+    volumes:
+      # Mount source code for live reload
+      - ./app:/app/app:rw
+      - ./requirements:/app/requirements:ro
+      - ./logs:/app/logs:rw
+      - ./data/uploads:/app/uploads:rw
+    command: >
+      sh -c "
+        echo 'Starting MCP Payments in DEVELOPMENT mode with auto-reload...'
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+      "
+
+  celery-worker:
+    build:
+      target: development  
+    environment:
+      - ENV=development
+    volumes:
+      # Mount source code for live reload
+      - ./app:/app/app:rw
+      - ./logs:/app/logs:rw
+    command: >
+      sh -c "
+        echo 'Starting Celery Worker in DEVELOPMENT mode with auto-reload...'
+        watchmedo auto-restart --directory=/app/app --pattern='*.py' --recursive -- celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+      "
+
+  celery-beat:
+    build:
+      target: development
+    environment:
+      - ENV=development  
+    volumes:
+      # Mount source code for live reload
+      - ./app:/app/app:rw
+      - ./logs:/app/logs:rw
+
+  frontend:
+    build:
+      target: development
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_ENVIRONMENT=development
+    volumes:
+      # Mount source code for hot reload
+      - ./frontend/src:/app/src:rw
+      - ./frontend/public:/app/public:rw
+      - ./frontend/package.json:/app/package.json:ro
+      - ./frontend/package-lock.json:/app/package-lock.json:ro
+      # Exclude node_modules to avoid conflicts  
+      - /app/node_modules
+    command: >
+      sh -c "
+        echo 'Starting React Frontend in DEVELOPMENT mode with hot reload...'
+        npm start
+      "
+
+  # Development tools
+  # Add PGAdmin for database management in development
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: mcp-payments-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@payments.local
+      - PGADMIN_DEFAULT_PASSWORD=admin123
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - payments-network
+    profiles:
+      - dev-tools
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: mcp-payments-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - payments-network
+    profiles:
+      - dev-tools
+
+volumes:
+  pgadmin_data:
+    driver: local 

@@ -24,5 +24,5 @@ class AuthService:
             "sub": user.id,
             "exp": datetime.utcnow() + timedelta(hours=1),
         }
-        token = jwt.encode(payload, settings.jwt_secret_key, algorithm="HS256")
+        token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="HS256")
         return token
