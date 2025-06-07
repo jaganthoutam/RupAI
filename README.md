@@ -1,4 +1,7 @@
-# 🚀 Enterprise MCP Payments Server with AI Integration :: RupAI
+# RupAI :: Enterprise MCP Payments Server with AI Integration
+
+![image](RupAI.png)
+
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
