@@ -8,3 +8,4 @@ ENV/
 *.log
 coverage.xml
 htmlcov/
+frontend/node_modules/
