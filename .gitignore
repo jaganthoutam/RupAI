@@ -3,6 +3,9 @@ __pycache__/
 *.egg-info/
 .eggs/
 .env
+.env.example
+.env.production
+.env.development
 venv/
 ENV/
 *.log
