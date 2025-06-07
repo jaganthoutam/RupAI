@@ -12,3 +12,4 @@ ENV/
 coverage.xml
 htmlcov/
 frontend/node_modules/
+customer-app/node_modules/
