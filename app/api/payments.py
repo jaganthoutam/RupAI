@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.services.payment_service import PaymentService
+from app.services import get_payment_service
 from app.mcp.server import MCPServer
 from app.db.dependencies import get_database
 
@@ -58,7 +59,7 @@ async def get_payments(
     start_date: Optional[datetime] = Query(None, description="Start date filter"),
     end_date: Optional[datetime] = Query(None, description="End date filter"),
     current_user: dict = Depends(get_current_user),
-    payment_service: PaymentService = Depends()
+    payment_service: PaymentService = Depends(get_payment_service)
 ):
     """Get paginated list of payments with AI-powered insights."""
     try:
@@ -88,8 +89,8 @@ async def get_payments(
                 status="completed" if i % 4 != 0 else "pending" if i % 8 != 0 else "failed",
                 method=["card", "digital_wallet", "bank_transfer"][i % 3],
                 customer_id=f"cust_{str(uuid4()).replace('-', '')[:8]}",
-                created_at=datetime.now().replace(hour=10+i%12, minute=i*3%60),
-                updated_at=datetime.now().replace(hour=10+i%12, minute=i*3%60+5),
+                created_at=datetime.now().replace(hour=10+i%12, minute=(i*3)%60),
+                updated_at=datetime.now().replace(hour=10+i%12, minute=(i*3+5)%60),
                 description=f"Payment #{i+1} - AI optimized routing",
                 metadata={
                     "source": "api",
@@ -117,7 +118,7 @@ async def get_payments(
 async def get_payment(
     payment_id: str,
     current_user: dict = Depends(get_current_user),
-    payment_service: PaymentService = Depends()
+    payment_service: PaymentService = Depends(get_payment_service)
 ):
     """Get specific payment details with AI analysis."""
     try:
@@ -166,7 +167,7 @@ async def get_payment(
 async def create_payment(
     payment_data: PaymentCreateRequest,
     current_user: dict = Depends(get_current_user),
-    payment_service: PaymentService = Depends()
+    payment_service: PaymentService = Depends(get_payment_service)
 ):
     """Create a new payment with AI-powered optimization."""
     try:
@@ -223,7 +224,7 @@ async def refund_payment(
     payment_id: str,
     refund_data: RefundRequest,
     current_user: dict = Depends(get_current_user),
-    payment_service: PaymentService = Depends()
+    payment_service: PaymentService = Depends(get_payment_service)
 ):
     """Process payment refund with AI validation."""
     try:
@@ -262,7 +263,7 @@ async def refund_payment(
 async def get_payment_analytics_summary(
     days: int = Query(30, ge=1, le=365, description="Number of days for analytics"),
     current_user: dict = Depends(get_current_user),
-    payment_service: PaymentService = Depends()
+    payment_service: PaymentService = Depends(get_payment_service)
 ):
     """Get payment analytics summary with AI insights."""
     try:

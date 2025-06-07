@@ -30,6 +30,8 @@ import SystemMonitoring from './pages/SystemMonitoring';
 import FraudDetection from './pages/FraudDetection';
 import AlertsManagement from './pages/AlertsManagement';
 import AuditLogs from './pages/AuditLogs';
+import UserManagement from './pages/UserManagement';
+import SubscriptionManagement from './pages/SubscriptionManagement';
 import Settings from './pages/Settings';
 import AIAssistant from './components/AIAssistant';
 
@@ -374,6 +376,38 @@ function App() {
                                     transition={pageTransition}
                                   >
                                     <AuditLogs />
+                                  </motion.div>
+                                }
+                              />
+                              
+                              <Route
+                                path="/users"
+                                element={
+                                  <motion.div
+                                    key="user-management"
+                                    initial="initial"
+                                    animate="in"
+                                    exit="out"
+                                    variants={pageVariants}
+                                    transition={pageTransition}
+                                  >
+                                    <UserManagement />
+                                  </motion.div>
+                                }
+                              />
+                              
+                              <Route
+                                path="/subscriptions"
+                                element={
+                                  <motion.div
+                                    key="subscription-management"
+                                    initial="initial"
+                                    animate="in"
+                                    exit="out"
+                                    variants={pageVariants}
+                                    transition={pageTransition}
+                                  >
+                                    <SubscriptionManagement />
                                   </motion.div>
                                 }
                               />

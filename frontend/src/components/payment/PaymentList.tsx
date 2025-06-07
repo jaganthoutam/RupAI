@@ -118,11 +118,17 @@ const PaymentList: React.FC<PaymentListProps> = ({ onPaymentSelect, refreshTrigg
       };
 
       const response = await PaymentService.getPayments(params);
-      setPayments(response.payments);
-      setTotalCount(response.total);
+      
+      // Ensure payments is always an array
+      const paymentsArray = Array.isArray(response?.payments) ? response.payments : [];
+      setPayments(paymentsArray);
+      setTotalCount(response?.total || paymentsArray.length);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch payments';
       setError(errorMsg);
+      // Set empty array on error to prevent undefined errors
+      setPayments([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -263,7 +269,7 @@ const PaymentList: React.FC<PaymentListProps> = ({ onPaymentSelect, refreshTrigg
                     <Typography color="error">{error}</Typography>
                   </TableCell>
                 </TableRow>
-              ) : payments.length === 0 ? (
+              ) : !Array.isArray(payments) || payments.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">No payments found</Typography>
@@ -341,7 +347,7 @@ const PaymentList: React.FC<PaymentListProps> = ({ onPaymentSelect, refreshTrigg
         </TableContainer>
 
         {/* Pagination */}
-        {!loading && !error && payments.length > 0 && (
+        {!loading && !error && Array.isArray(payments) && payments.length > 0 && (
           <TablePagination
             component="div"
             count={totalCount}

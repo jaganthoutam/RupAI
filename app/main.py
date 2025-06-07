@@ -40,6 +40,14 @@ from app.api.payments import router as payments_router
 from app.api.wallets import router as wallets_router
 from app.api.monitoring import router as monitoring_router
 from app.api.compliance import router as compliance_router
+from app.api.config import router as config_router
+from app.api.users import router as users_router
+from app.api.subscriptions import router as subscriptions_router
+from app.api.settings import router as settings_router
+from app.api.advanced import router as advanced_router
+
+# Import WebSocket router
+from app.websockets import websocket_router
 
 # Global instances
 mcp_server: MCPServer = None
@@ -210,15 +218,21 @@ def setup_middleware(app: FastAPI) -> None:
 def setup_routes(app: FastAPI) -> None:
     """Setup API routes and endpoints."""
     
-    # Include authentication routes
-    app.include_router(auth_router)
+    # Include API routers
+    app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(analytics_router, prefix="/api/v1")
+    app.include_router(payments_router, prefix="/api/v1")
+    app.include_router(wallets_router, prefix="/api/v1")
+    app.include_router(monitoring_router, prefix="/api/v1")
+    app.include_router(compliance_router, prefix="/api/v1")
+    app.include_router(config_router, prefix="/api/v1")
+    app.include_router(users_router, prefix="/api/v1")
+    app.include_router(subscriptions_router, prefix="/api/v1")
+    app.include_router(settings_router, prefix="/api/v1")
+    app.include_router(advanced_router, prefix="/api/v1")
     
-    # Include all new API routers with AI-powered endpoints
-    app.include_router(analytics_router)
-    app.include_router(payments_router)
-    app.include_router(wallets_router)
-    app.include_router(monitoring_router)
-    app.include_router(compliance_router)
+    # Include WebSocket router
+    app.include_router(websocket_router)
     
     @app.get("/health", tags=["Health"])
     async def health_check():

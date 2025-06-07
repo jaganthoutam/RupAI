@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  customer-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - mcp-payments
+
+  backend:
+    image: mcp-payments-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://payments_user:payments_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-here
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - mcp-payments
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=payments_db
+      - POSTGRES_USER=payments_user
+      - POSTGRES_PASSWORD=payments_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mcp-payments
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mcp-payments
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  mcp-payments:
+    driver: bridge 

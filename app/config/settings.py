@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     
     # CORS Settings
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8000"],
+        default=["http://localhost:3000", "http://localhost:3001", "http://localhost:8000"],
         description="Allowed CORS origins"
     )
     
@@ -285,3 +285,8 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Get global settings instance."""
+    return settings

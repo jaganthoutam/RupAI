@@ -46,4 +46,27 @@ async def get_db_sync() -> AsyncSession:
     if database is None:
         raise RuntimeError("Database not initialized. Call set_database() first.")
     
-    return database.get_session() 
+    return database.get_session()
+
+
+def async_session_factory():
+    """
+    Factory function to create async database sessions for Celery tasks.
+    
+    Returns:
+        AsyncSession factory function
+    """
+    if database is None:
+        raise RuntimeError("Database not initialized. Call set_database() first.")
+    
+    return database.get_session
+
+
+def get_session():
+    """
+    Get database session factory for celery tasks.
+    
+    Returns:
+        Database session factory
+    """
+    return async_session_factory() 

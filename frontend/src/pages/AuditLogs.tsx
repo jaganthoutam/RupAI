@@ -60,6 +60,7 @@ import {
   LocationOn,
 } from '@mui/icons-material';
 import { mcpService } from '../services/mcpService';
+import { ApiService } from '../services/apiService';
 
 interface AuditLog {
   id: string;
@@ -122,122 +123,6 @@ const AuditLogs: React.FC = () => {
     uniqueIPs: 0,
   });
 
-  // Mock data for demonstration
-  const mockAuditLogs: AuditLog[] = [
-    {
-      id: 'log_001',
-      timestamp: '2024-01-15T14:30:00Z',
-      userId: 'user_123',
-      userName: 'john.doe@email.com',
-      action: 'payment.create',
-      resource: 'payment',
-      resourceId: 'pay_789012',
-      status: 'success',
-      ip: '192.168.1.100',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      location: 'New York, US',
-      correlationId: 'corr_abc123',
-      sessionId: 'sess_def456',
-      details: {
-        amount: 150.00,
-        currency: 'USD',
-        method: 'credit_card',
-        merchant: 'example_store',
-      },
-    },
-    {
-      id: 'log_002',
-      timestamp: '2024-01-15T14:28:00Z',
-      userId: 'user_456',
-      userName: 'jane.smith@email.com',
-      action: 'auth.login',
-      resource: 'user',
-      resourceId: 'user_456',
-      status: 'failure',
-      ip: '203.0.113.42',
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
-      location: 'London, UK',
-      correlationId: 'corr_xyz789',
-      sessionId: 'sess_ghi012',
-      details: {
-        reason: 'invalid_password',
-        attempts: 3,
-        locked: false,
-      },
-    },
-    {
-      id: 'log_003',
-      timestamp: '2024-01-15T14:25:00Z',
-      userId: 'admin_001',
-      userName: 'admin@company.com',
-      action: 'admin.settings.update',
-      resource: 'settings',
-      resourceId: 'setting_fraud_threshold',
-      status: 'success',
-      ip: '10.0.0.5',
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      location: 'San Francisco, US',
-      correlationId: 'corr_mno345',
-      sessionId: 'sess_pqr678',
-      details: {
-        previous_value: 85,
-        new_value: 90,
-        category: 'fraud_detection',
-      },
-    },
-    {
-      id: 'log_004',
-      timestamp: '2024-01-15T14:20:00Z',
-      userId: 'user_789',
-      userName: 'mike.johnson@email.com',
-      action: 'wallet.transfer',
-      resource: 'wallet',
-      resourceId: 'wallet_345',
-      status: 'warning',
-      ip: '198.51.100.15',
-      userAgent: 'Mozilla/5.0 (Android 14; Mobile; rv:121.0)',
-      location: 'Toronto, CA',
-      correlationId: 'corr_stu901',
-      sessionId: 'sess_vwx234',
-      details: {
-        amount: 5000.00,
-        currency: 'USD',
-        to_wallet: 'wallet_678',
-        warning: 'large_amount_transfer',
-      },
-    },
-    {
-      id: 'log_005',
-      timestamp: '2024-01-15T14:15:00Z',
-      userId: 'user_012',
-      userName: 'sarah.wilson@email.com',
-      action: 'payment.refund',
-      resource: 'payment',
-      resourceId: 'pay_456789',
-      status: 'success',
-      ip: '172.16.0.25',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0)',
-      location: 'Sydney, AU',
-      correlationId: 'corr_yza567',
-      sessionId: 'sess_bcd890',
-      details: {
-        original_amount: 299.99,
-        refund_amount: 299.99,
-        reason: 'customer_request',
-        processed_by: 'admin_002',
-      },
-    },
-  ];
-
-  const mockStats: AuditStats = {
-    totalLogs: 15678,
-    successCount: 14234,
-    failureCount: 956,
-    warningCount: 488,
-    uniqueUsers: 1234,
-    uniqueIPs: 892,
-  };
-
   useEffect(() => {
     loadAuditLogs();
   }, [filters]);
@@ -259,13 +144,57 @@ const AuditLogs: React.FC = () => {
   const loadAuditLogs = async () => {
     setLoading(true);
     try {
-      // Use mock data for demo - in real implementation, this would call mcpService
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setAuditLogs(mockAuditLogs);
-      setStats(mockStats);
+      // Call the real API instead of using mock data
+      const auditData = await ApiService.getAuditLogs({
+        start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        end_date: new Date(),
+        page: 1,
+        limit: 100
+      });
+      
+      // Transform API response to match component interface
+      const transformedLogs: AuditLog[] = auditData.logs?.map((log: any) => ({
+        id: log.id,
+        timestamp: log.timestamp,
+        userId: log.user_id,
+        userName: log.user_id, // API doesn't provide userName, using user_id
+        action: log.action,
+        resource: log.entity_type,
+        resourceId: log.entity_id,
+        status: log.result === 'success' ? 'success' : log.result === 'failed' ? 'failure' : 'warning',
+        ip: log.ip_address,
+        userAgent: log.user_agent,
+        location: 'Unknown', // API doesn't provide location
+        correlationId: log.id, // Using log id as correlation id
+        sessionId: log.id, // Using log id as session id
+        details: log.changes || {}
+      })) || [];
+      
+      setAuditLogs(transformedLogs);
+      
+      // Calculate stats from the logs
+      const calculatedStats: AuditStats = {
+        totalLogs: transformedLogs.length,
+        successCount: transformedLogs.filter(log => log.status === 'success').length,
+        failureCount: transformedLogs.filter(log => log.status === 'failure').length,
+        warningCount: transformedLogs.filter(log => log.status === 'warning').length,
+        uniqueUsers: new Set(transformedLogs.map(log => log.userId)).size,
+        uniqueIPs: new Set(transformedLogs.map(log => log.ip)).size,
+      };
+      
+      setStats(calculatedStats);
     } catch (error) {
       console.error('Error loading audit logs:', error);
+      // Fallback to empty data on error
+      setAuditLogs([]);
+      setStats({
+        totalLogs: 0,
+        successCount: 0,
+        failureCount: 0,
+        warningCount: 0,
+        uniqueUsers: 0,
+        uniqueIPs: 0,
+      });
     } finally {
       setLoading(false);
     }

@@ -13,11 +13,11 @@ from datetime import datetime
 
 from app.config.settings import settings
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)  # Don't auto-error when no token
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Dict[str, Any]:
     """
     Extract and validate current user from JWT token.
@@ -26,8 +26,27 @@ async def get_current_user(
         Dict containing user information and permissions
         
     Raises:
-        HTTPException: If token is invalid or expired
+        HTTPException: If token is invalid or expired (when auth is enabled)
     """
+    # If authentication is disabled, return mock admin user
+    if not settings.ENABLE_AUTHENTICATION:
+        return {
+            "id": "admin_001",
+            "email": "admin@company.com",
+            "name": "Admin User",
+            "role": "admin",
+            "permissions": ["read", "write", "admin"],
+            "is_authenticated": True
+        }
+    
+    # If no credentials provided and auth is enabled, return error
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     try:
         token = credentials.credentials
         

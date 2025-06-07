@@ -191,7 +191,7 @@ const AlertsManagement: React.FC = () => {
           { severity: 'low', count: alertsList.filter(a => a.severity === 'low').length },
         ],
         alerts_by_service: Array.from(new Set(alertsList.map(a => a.service))).map(service => ({
-          service,
+          service: String(service),
           count: alertsList.filter(a => a.service === service).length,
         })),
       };

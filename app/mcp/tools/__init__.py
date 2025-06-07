@@ -20,6 +20,9 @@ from .analytics import (
     generate_performance_report,
     get_dashboard_metrics,
     generate_custom_report,
+    optimize_payment_routing,
+    create_payment_optimized,
+    smart_payment_routing,
 )
 # Temporarily commented out to isolate metadata issue
 from .monitoring import (
@@ -38,6 +41,15 @@ from .compliance import (
     validate_pci_compliance,
     get_audit_trail,
 )
+from .subscriptions import (
+    create_subscription,
+    get_subscription,
+    update_subscription,
+    cancel_subscription,
+    get_subscription_metrics,
+    create_subscription_optimized,
+    analyze_subscription_health,
+)
 
 # Comprehensive tool registry for production-grade payment system
 TOOL_REGISTRY = {
@@ -53,6 +65,15 @@ TOOL_REGISTRY = {
     "wallet_transaction_history": wallet_transaction_history,
     "top_up_wallet": top_up_wallet,
     
+    # Subscription Management Tools
+    "create_subscription": create_subscription,
+    "get_subscription": get_subscription,
+    "update_subscription": update_subscription,
+    "cancel_subscription": cancel_subscription,
+    "get_subscription_metrics": get_subscription_metrics,
+    "create_subscription_optimized": create_subscription_optimized,
+    "analyze_subscription_health": analyze_subscription_health,
+    
     # Analytics Tools
     "get_payment_metrics": get_payment_metrics,
     "analyze_user_behavior": analyze_user_behavior,
@@ -61,6 +82,11 @@ TOOL_REGISTRY = {
     "generate_performance_report": generate_performance_report,
     "get_dashboard_metrics": get_dashboard_metrics,
     "generate_custom_report": generate_custom_report,
+    
+    # AI Optimization Tools
+    "optimize_payment_routing": optimize_payment_routing,
+    "create_payment_optimized": create_payment_optimized,
+    "smart_payment_routing": smart_payment_routing,
     
     # Monitoring Tools
     "perform_health_check": perform_health_check,
@@ -93,6 +119,15 @@ TOOL_CATEGORIES = {
         "wallet_transaction_history",
         "top_up_wallet",
     ],
+    "subscriptions": [
+        "create_subscription",
+        "get_subscription",
+        "update_subscription", 
+        "cancel_subscription",
+        "get_subscription_metrics",
+        "create_subscription_optimized",
+        "analyze_subscription_health",
+    ],
     "analytics": [
         "get_payment_metrics",
         "analyze_user_behavior",
@@ -101,6 +136,13 @@ TOOL_CATEGORIES = {
         "generate_performance_report",
         "get_dashboard_metrics",
         "generate_custom_report",
+    ],
+    "ai_optimization": [
+        "optimize_payment_routing",
+        "create_payment_optimized", 
+        "smart_payment_routing",
+        "create_subscription_optimized",
+        "analyze_subscription_health",
     ],
     "monitoring": [
         "perform_health_check",
@@ -134,6 +176,15 @@ TOOL_DESCRIPTIONS = {
     "wallet_transaction_history": "Get wallet transaction history",
     "top_up_wallet": "Add funds to user wallet",
     
+    # Subscription Tools
+    "create_subscription": "Create new subscription plan",
+    "get_subscription": "Retrieve subscription details",
+    "update_subscription": "Update subscription parameters",
+    "cancel_subscription": "Cancel active subscription",
+    "get_subscription_metrics": "Get subscription analytics",
+    "create_subscription_optimized": "Create AI-optimized subscription with intelligent pricing and routing",
+    "analyze_subscription_health": "AI-powered subscription health analysis and churn prediction",
+    
     # Analytics Tools
     "get_payment_metrics": "Generate comprehensive payment metrics and KPIs",
     "analyze_user_behavior": "Analyze user behavior patterns and engagement",
@@ -142,6 +193,11 @@ TOOL_DESCRIPTIONS = {
     "generate_performance_report": "Generate system performance analytics",
     "get_dashboard_metrics": "Get real-time dashboard metrics and KPIs",
     "generate_custom_report": "Generate custom analytics reports",
+    
+    # AI Optimization Tools
+    "optimize_payment_routing": "AI-powered payment routing optimization for cost, speed, or success rate",
+    "create_payment_optimized": "Create AI-optimized payment with intelligent routing and fraud detection",
+    "smart_payment_routing": "Intelligent payment routing based on customer profile and transaction context",
     
     # Monitoring Tools
     "perform_health_check": "Perform comprehensive system health check",
@@ -177,6 +233,10 @@ TOOL_PERMISSIONS = {
         "transfer_funds",
         "wallet_transaction_history",
         "top_up_wallet",
+        "create_subscription",
+        "get_subscription",
+        "update_subscription",
+        "cancel_subscription",
     ],
     
     # Analytics user tools
@@ -187,6 +247,19 @@ TOOL_PERMISSIONS = {
         "get_dashboard_metrics",
         "generate_custom_report",
         "get_performance_metrics",
+        "smart_payment_routing",
+        "get_subscription_metrics",
+        "analyze_subscription_health",
+    ],
+    
+    # AI optimization tools
+    "ai_operator": [
+        "optimize_payment_routing",
+        "create_payment_optimized",
+        "smart_payment_routing",
+        "detect_fraud_patterns",
+        "create_subscription_optimized",
+        "analyze_subscription_health",
     ],
     
     # Operations team tools

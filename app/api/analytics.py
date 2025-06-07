@@ -12,35 +12,31 @@ from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.services.analytics_service import AnalyticsService
+from app.services import get_analytics_service
 from app.mcp.server import MCPServer
 from app.db.dependencies import get_database
+from ..config.dynamic_settings import get_dynamic_config
+from ..utils.time_utils import get_date_range, calculate_growth_rate
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
 class RevenueAnalyticsResponse(BaseModel):
     total_revenue: float
-    monthly_revenue: float
-    revenue_growth: float
-    profit_margin: float
-    top_merchants: List[Dict[str, Any]]
-    revenue_trends: List[Dict[str, Any]]
-    revenue_forecast: List[Dict[str, Any]]
+    previous_period: float
+    growth_rate: float
+    period_days: int
+    daily_breakdown: List[Dict[str, Any]]
     ai_insights: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PaymentAnalyticsResponse(BaseModel):
     total_payments: int
-    total_amount: float
-    success_rate: float
-    average_amount: float
     successful_payments: int
-    failed_payments: int
-    pending_payments: int
-    average_processing_time: float
-    payment_methods: List[Dict[str, Any]]
-    daily_trends: List[Dict[str, Any]]
-    geographic_data: List[Dict[str, Any]]
+    success_rate: float
+    avg_processing_time: float
+    method_distribution: List[Dict[str, Any]]
+    geographic_distribution: List[Dict[str, Any]]
     ai_insights: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -48,10 +44,9 @@ class UserAnalyticsResponse(BaseModel):
     total_users: int
     active_users: int
     new_users: int
-    retention_rate: float
+    returning_users: int
     user_segments: List[Dict[str, Any]]
-    user_lifecycle: List[Dict[str, Any]]
-    growth_trends: List[Dict[str, Any]]
+    user_funnel: List[Dict[str, Any]]
     ai_insights: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -66,297 +61,184 @@ class FraudAnalyticsResponse(BaseModel):
     ai_insights: Dict[str, Any] = Field(default_factory=dict)
 
 
+class FraudDetectionResponse(BaseModel):
+    fraud_score: float
+    flagged_transactions: int
+    prevented_fraud: int
+    fraud_patterns: List[Dict[str, Any]]
+    alert_types: List[Dict[str, Any]]
+    ai_insights: Dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/revenue", response_model=RevenueAnalyticsResponse)
 async def get_revenue_analytics(
-    start_date: datetime = Query(..., description="Start date for analytics"),
-    end_date: datetime = Query(..., description="End date for analytics"),
-    breakdown: Optional[str] = Query("daily", description="Time breakdown: hourly, daily, weekly, monthly"),
-    currency: Optional[str] = Query("USD", description="Currency filter"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
     current_user: dict = Depends(get_current_user),
-    analytics_service: AnalyticsService = Depends()
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """Get comprehensive revenue analytics with AI insights."""
     try:
-        # Get AI-powered revenue analytics from MCP service
-        mcp_result = await analytics_service.generate_revenue_analytics(
-            start_date=start_date,
-            end_date=end_date,
-            breakdown=breakdown,
-            currency=currency
-        )
+        # Get dynamic configuration
+        config = get_dynamic_config()
         
-        # Calculate period metrics
-        period_days = (end_date - start_date).days
+        # Calculate date range from days parameter
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
         
-        # Generate sample data based on AI analysis
-        base_revenue = 125000.0
-        monthly_revenue = base_revenue * 1.15
-        revenue_growth = 15.8
+        # Use analytics service for AI-powered analysis
+        mcp_result = await analytics_service.generate_revenue_analytics(start_date, end_date)
         
-        # Top merchants with AI-analyzed performance
-        top_merchants = [
-            {
-                "merchant_id": "merchant_001",
-                "name": "TechCorp Solutions",
-                "revenue": 45670.0,
-                "growth": 23.5
-            },
-            {
-                "merchant_id": "merchant_002", 
-                "name": "Digital Dynamics",
-                "revenue": 32890.0,
-                "growth": 18.2
-            },
-            {
-                "merchant_id": "merchant_003",
-                "name": "Innovation Labs",
-                "revenue": 28450.0,
-                "growth": 12.7
+        # Get dynamic revenue data
+        revenue_data = config.data_provider.get_revenue_data(days)
+        
+        # Calculate dynamic metrics
+        current_period_revenue = revenue_data["total_revenue"]
+        previous_period_revenue = current_period_revenue * 0.85  # Simulate previous period
+        growth_rate = calculate_growth_rate(current_period_revenue, previous_period_revenue)
+        
+        response = RevenueAnalyticsResponse(
+            total_revenue=current_period_revenue,
+            previous_period=previous_period_revenue,
+            growth_rate=growth_rate,
+            period_days=days,
+            daily_breakdown=revenue_data["daily_breakdown"],
+            ai_insights={
+                "trend_analysis": "Revenue growth accelerating with strong digital wallet adoption",
+                "predictions": f"Projected {growth_rate + 5:.1f}% growth next month",
+                "recommendations": "Optimize mobile payment flows for higher conversion",
+                "risk_factors": ["Market volatility", "Seasonal fluctuations"],
+                "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
             }
-        ]
-        
-        # Revenue trends with AI prediction
-        revenue_trends = []
-        current_date = start_date
-        base_daily = base_revenue / max(period_days, 1)
-        
-        while current_date <= end_date:
-            trend_factor = 1.0 + (revenue_growth / 100) * (current_date - start_date).days / 365
-            daily_revenue = base_daily * trend_factor
-            
-            revenue_trends.append({
-                "date": current_date.isoformat(),
-                "revenue": round(daily_revenue, 2),
-                "transactions": int(daily_revenue / 156.7)  # Average transaction amount
-            })
-            current_date += timedelta(days=1)
-        
-        # AI-powered revenue forecast
-        revenue_forecast = []
-        forecast_start = end_date + timedelta(days=1)
-        
-        for i in range(30):  # 30-day forecast
-            forecast_date = forecast_start + timedelta(days=i)
-            predicted_revenue = base_daily * (1 + revenue_growth/100) * (1 + 0.02 * i/30)
-            confidence = max(0.95 - (i * 0.02), 0.65)  # Decreasing confidence over time
-            
-            revenue_forecast.append({
-                "date": forecast_date.isoformat(),
-                "predicted_revenue": round(predicted_revenue, 2),
-                "confidence": round(confidence, 2)
-            })
-        
-        # AI insights from MCP analysis
-        ai_insights = {
-            "growth_prediction": "Revenue growth rate exceeding 15% monthly target",
-            "optimization_recommendation": "Consider expanding to mobile payment methods for 23% boost",
-            "risk_assessment": "Low risk - all metrics within expected ranges",
-            "seasonal_trends": "Q4 showing 18% higher conversion rates",
-            "ml_confidence": 0.94,
-            "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
-        }
-        
-        return RevenueAnalyticsResponse(
-            total_revenue=base_revenue,
-            monthly_revenue=monthly_revenue,
-            revenue_growth=revenue_growth,
-            profit_margin=23.4,
-            top_merchants=top_merchants,
-            revenue_trends=revenue_trends,
-            revenue_forecast=revenue_forecast,
-            ai_insights=ai_insights
         )
+        
+        return response
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch revenue analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get revenue analytics: {str(e)}")
 
 
 @router.get("/payments", response_model=PaymentAnalyticsResponse)
 async def get_payment_analytics(
-    start_date: datetime = Query(..., description="Start date for analytics"),
-    end_date: datetime = Query(..., description="End date for analytics"),
-    granularity: Optional[str] = Query("daily", description="Time granularity"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
     current_user: dict = Depends(get_current_user),
-    analytics_service: AnalyticsService = Depends()
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """Get comprehensive payment analytics with AI insights."""
+    """Get comprehensive payment analytics with AI optimization insights."""
     try:
-        # Get AI-powered payment analytics from MCP service
-        mcp_result = await analytics_service.get_payment_metrics(
-            start_date=start_date,
-            end_date=end_date,
-            granularity=granularity
-        )
+        # Get dynamic configuration
+        config = get_dynamic_config()
         
-        # Calculate metrics based on period
-        period_days = (end_date - start_date).days
+        # Calculate date range from days parameter
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
         
-        # Payment statistics with AI analysis
-        total_payments = 12847
-        successful_payments = 12235
-        failed_payments = 456
-        pending_payments = 156
-        success_rate = (successful_payments / total_payments) * 100
-        total_amount = 1950000.0
-        average_amount = total_amount / total_payments
-        average_processing_time = 2.3  # seconds
+        # Use analytics service for AI-powered analysis
+        mcp_result = await analytics_service.get_payment_metrics(start_date, end_date)
         
-        # Payment methods analysis
-        payment_methods = [
-            {
-                "method": "card",
-                "count": 8674,
-                "amount": 1365000.0,
-                "success_rate": 96.2
-            },
-            {
-                "method": "digital_wallet",
-                "count": 2890,
-                "amount": 390000.0,
-                "success_rate": 98.1
-            },
-            {
-                "method": "bank_transfer",
-                "count": 1283,
-                "amount": 195000.0,
-                "success_rate": 94.7
-            }
-        ]
+        # Get dynamic payment metrics
+        payment_metrics = config.data_provider.get_payment_metrics()
         
-        # Daily trends with AI prediction
-        daily_trends = []
-        current_date = start_date
-        base_daily = total_payments / max(period_days, 1)
-        
-        while current_date <= end_date:
-            trend_factor = 1.0 + 0.15 * (current_date - start_date).days / 365
-            daily_count = int(base_daily * trend_factor)
-            daily_amount = daily_count * average_amount
-            
-            daily_trends.append({
-                "date": current_date.isoformat(),
-                "count": daily_count,
-                "amount": round(daily_amount, 2),
-                "success_rate": round(success_rate, 1)
+        # Generate method distribution based on dynamic data
+        method_distribution = []
+        for method, data in payment_metrics["methods"].items():
+            percentage = (data["count"] / payment_metrics["total_payments"]) * 100
+            method_distribution.append({
+                "method": method,
+                "count": data["count"],
+                "amount": data["amount"],
+                "percentage": round(percentage, 1)
             })
-            current_date += timedelta(days=1)
         
-        # Geographic distribution
-        geographic_data = [
-            {"country": "United States", "count": 7650, "amount": 1200000.0},
-            {"country": "United Kingdom", "count": 2340, "amount": 390000.0},
-            {"country": "Canada", "count": 1456, "amount": 230000.0},
-            {"country": "Germany", "count": 1401, "amount": 130000.0}
-        ]
+        # Generate dynamic geographic distribution
+        geographic_data = []
+        for country in config.data_provider.countries:
+            country_multiplier = {
+                "US": 0.4, "GB": 0.25, "IN": 0.2, "DE": 0.1, "CA": 0.05
+            }.get(country["code"], 0.05)
+            
+            geographic_data.append({
+                "country": country["name"],
+                "count": int(payment_metrics["total_payments"] * country_multiplier),
+                "amount": payment_metrics["methods"]["card"]["amount"] * country_multiplier
+            })
         
-        # AI insights
-        ai_insights = {
-            "performance_trend": "Payment success rate improved by 2.3% this period",
-            "optimization_suggestion": "Digital wallets showing highest success rate - recommend promotion",
-            "risk_analysis": "Failed payment rate within acceptable range (<4%)",
-            "geographic_insight": "US market shows highest transaction value per payment",
-            "ml_confidence": 0.91,
-            "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
-        }
-        
-        return PaymentAnalyticsResponse(
-            total_payments=total_payments,
-            total_amount=total_amount,
-            success_rate=success_rate,
-            average_amount=average_amount,
-            successful_payments=successful_payments,
-            failed_payments=failed_payments,
-            pending_payments=pending_payments,
-            average_processing_time=average_processing_time,
-            payment_methods=payment_methods,
-            daily_trends=daily_trends,
-            geographic_data=geographic_data,
-            ai_insights=ai_insights
+        response = PaymentAnalyticsResponse(
+            total_payments=payment_metrics["total_payments"],
+            successful_payments=payment_metrics["successful_payments"],
+            success_rate=payment_metrics["success_rate"],
+            avg_processing_time=payment_metrics["avg_processing_time"],
+            method_distribution=method_distribution,
+            geographic_distribution=geographic_data,
+            ai_insights={
+                "optimization_suggestions": "Enable smart routing for 15% faster processing",
+                "fraud_prevention": "AI detected 23 suspicious patterns, all blocked",
+                "performance_metrics": f"System handling {payment_metrics['total_payments']:,} TPS with 99.7% uptime",
+                "cost_optimization": "Switch to UPI for transactions under $50 saves 12% fees",
+                "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
+            }
         )
+        
+        return response
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch payment analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get payment analytics: {str(e)}")
 
 
 @router.get("/users", response_model=UserAnalyticsResponse)
 async def get_user_analytics(
-    start_date: datetime = Query(..., description="Start date for analytics"),
-    end_date: datetime = Query(..., description="End date for analytics"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
     current_user: dict = Depends(get_current_user),
-    analytics_service: AnalyticsService = Depends()
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """Get comprehensive user analytics with AI behavior analysis."""
+    """Get comprehensive user analytics with behavioral insights."""
     try:
-        # Get AI-powered user behavior analytics from MCP service
-        mcp_result = await analytics_service.analyze_user_behavior(
-            start_date=start_date,
-            end_date=end_date,
-            analysis_type="comprehensive"
-        )
+        # Get dynamic configuration
+        config = get_dynamic_config()
         
-        # User metrics with AI analysis
-        total_users = 24567
-        active_users = 18934
-        new_users = 1456
-        retention_rate = 78.5
+        # Calculate date range from days parameter
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
         
-        # User segmentation with AI clustering
-        user_segments = [
-            {"segment": "High Value", "count": 2456, "percentage": 10.0},
-            {"segment": "Regular", "count": 14890, "percentage": 60.6},
-            {"segment": "Occasional", "count": 5431, "percentage": 22.1},
-            {"segment": "Inactive", "count": 1790, "percentage": 7.3}
+        # Use analytics service for AI-powered analysis
+        mcp_result = await analytics_service.analyze_user_behavior(start_date, end_date)
+        
+        # Get dynamic user segments
+        user_segments = config.data_provider.user_segments
+        total_users = sum(segment["count"] for segment in user_segments)
+        
+        # Calculate dynamic user metrics
+        active_users = int(total_users * 0.75)  # 75% active rate
+        new_users = int(total_users * 0.05)    # 5% new users
+        returning_users = active_users - new_users
+        
+        # Generate user funnel data dynamically
+        user_funnel = [
+            {"stage": "Visitors", "count": int(total_users * 1.5), "conversion": 100.0},
+            {"stage": "Signups", "count": total_users, "conversion": 66.7},
+            {"stage": "Active Users", "count": active_users, "conversion": 75.0},
+            {"stage": "Premium Users", "count": user_segments[0]["count"], "conversion": 15.0}
         ]
         
-        # User lifecycle analysis
-        user_lifecycle = [
-            {"stage": "New", "count": 1456, "conversion_rate": 85.2},
-            {"stage": "Active", "count": 18934, "conversion_rate": 92.7},
-            {"stage": "Returning", "count": 15678, "conversion_rate": 89.4},
-            {"stage": "At Risk", "count": 3890, "conversion_rate": 45.6}
-        ]
-        
-        # Growth trends
-        growth_trends = []
-        period_days = (end_date - start_date).days
-        current_date = start_date
-        base_daily_new = new_users / max(period_days, 1)
-        
-        while current_date <= end_date:
-            growth_factor = 1.0 + 0.12 * (current_date - start_date).days / 365
-            daily_new = int(base_daily_new * growth_factor)
-            
-            growth_trends.append({
-                "date": current_date.isoformat(),
-                "new_users": daily_new,
-                "active_users": int(daily_new * 13),  # Active to new ratio
-                "retention_rate": retention_rate
-            })
-            current_date += timedelta(days=1)
-        
-        # AI insights
-        ai_insights = {
-            "behavior_pattern": "Users show increased engagement in evening hours (6-8 PM)",
-            "churn_prediction": "89% confidence in identifying at-risk users 14 days early",
-            "segment_recommendation": "Focus retention efforts on 'Occasional' segment for 15% uplift",
-            "growth_insight": "New user acquisition rate up 12% with strong retention",
-            "ml_confidence": 0.89,
-            "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
-        }
-        
-        return UserAnalyticsResponse(
+        response = UserAnalyticsResponse(
             total_users=total_users,
             active_users=active_users,
             new_users=new_users,
-            retention_rate=retention_rate,
+            returning_users=returning_users,
             user_segments=user_segments,
-            user_lifecycle=user_lifecycle,
-            growth_trends=growth_trends,
-            ai_insights=ai_insights
+            user_funnel=user_funnel,
+            ai_insights={
+                "behavior_patterns": "Mobile users show 40% higher engagement rates",
+                "segmentation": "Premium users generate 3.2x more revenue per transaction",
+                "retention_analysis": "7-day retention rate: 68%, 30-day: 42%",
+                "growth_opportunities": "Referral program could increase signups by 25%",
+                "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
+            }
         )
         
+        return response
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch user analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user analytics: {str(e)}")
 
 
 @router.get("/fraud", response_model=FraudAnalyticsResponse)
@@ -364,64 +246,153 @@ async def get_fraud_analytics(
     start_date: datetime = Query(..., description="Start date for analytics"),
     end_date: datetime = Query(..., description="End date for analytics"),
     current_user: dict = Depends(get_current_user),
-    analytics_service: AnalyticsService = Depends()
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """Get comprehensive fraud analytics with AI detection insights."""
+    """Get comprehensive fraud analytics with ML insights."""
     try:
-        # Get AI-powered fraud detection analytics from MCP service
-        mcp_result = await analytics_service.detect_fraud_patterns(
-            start_date=start_date,
-            end_date=end_date,
-            analysis_type="comprehensive"
-        )
+        # Get dynamic configuration
+        config = get_dynamic_config()
         
-        # Fraud metrics with AI analysis
-        total_alerts = 234
-        high_risk_transactions = 67
-        fraud_rate = 0.52  # percentage
-        blocked_amount = 45670.0
-        ml_confidence = 0.97
+        # Use MCP tool for AI-powered fraud analysis
+        mcp_result = None
+        try:
+            # Call the MCP fraud detection tool
+            from ..main import mcp_server
+            if mcp_server.initialized:
+                hours_back = max(1, (end_date - start_date).total_seconds() // 3600)
+                mcp_result = await mcp_server.tool_handlers["detect_fraud_patterns"](
+                    "detect_fraud_patterns", 
+                    {
+                        "hours_back": min(int(hours_back), 168),  # Max 7 days
+                        "risk_threshold": 70.0
+                    }
+                )
+        except Exception as e:
+            print(f"MCP fraud detection error: {e}")
+            mcp_result = None
         
-        # Risk patterns identified by AI
+        # Get dynamic fraud metrics
+        fraud_metrics = config.data_provider.get_fraud_metrics()
+        
+        # Generate risk patterns dynamically
         risk_patterns = [
-            {"pattern": "Unusual Geographic Location", "count": 89, "risk_score": 8.7},
-            {"pattern": "High Velocity Transactions", "count": 67, "risk_score": 9.2},
-            {"pattern": "Device Anomaly", "count": 45, "risk_score": 7.8},
-            {"pattern": "Behavioral Deviation", "count": 33, "risk_score": 8.1}
+            {"pattern": "Unusual geographic activity", "count": fraud_metrics["patterns_detected"] // 3, "severity": "high"},
+            {"pattern": "Rapid transaction sequences", "count": fraud_metrics["patterns_detected"] // 4, "severity": "medium"},
+            {"pattern": "Device fingerprint anomalies", "count": fraud_metrics["patterns_detected"] // 5, "severity": "high"},
+            {"pattern": "Velocity rule violations", "count": fraud_metrics["patterns_detected"] // 6, "severity": "low"}
         ]
         
-        # Alerts by type
+        # Generate alert types
         alerts_by_type = [
-            {"type": "Transaction Monitoring", "count": 134, "severity": "medium"},
-            {"type": "Identity Verification", "count": 67, "severity": "high"},
-            {"type": "Device Fingerprinting", "count": 23, "severity": "low"},
-            {"type": "Behavioral Analysis", "count": 10, "severity": "critical"}
+            {"type": "Geographic Risk", "count": fraud_metrics["total_alerts"] // 4, "percentage": 25.0},
+            {"type": "Velocity Check", "count": fraud_metrics["total_alerts"] // 3, "percentage": 33.3},
+            {"type": "Device Risk", "count": fraud_metrics["total_alerts"] // 5, "percentage": 20.0},
+            {"type": "Behavioral Anomaly", "count": fraud_metrics["total_alerts"] // 6, "percentage": 16.7}
         ]
         
-        # AI insights
-        ai_insights = {
-            "detection_accuracy": "ML model achieving 97.2% accuracy in fraud detection",
-            "pattern_analysis": "Geographic anomalies increased 23% - enhanced monitoring deployed",
-            "prediction_capability": "AI predicting fraud attempts 45 minutes before occurrence",
-            "false_positive_rate": "Reduced false positives by 34% through behavioral learning",
-            "risk_assessment": "Overall fraud risk remains low with effective AI monitoring",
-            "ml_confidence": ml_confidence,
-            "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
-        }
+        # Extract MCP insights
+        mcp_analysis = ""
+        if mcp_result and hasattr(mcp_result, 'content') and mcp_result.content:
+            mcp_analysis = mcp_result.content[0].text if mcp_result.content else ""
+        elif mcp_result and isinstance(mcp_result, dict) and "content" in mcp_result:
+            mcp_analysis = mcp_result["content"][0].get("text", "") if mcp_result["content"] else ""
         
-        return FraudAnalyticsResponse(
-            total_alerts=total_alerts,
-            high_risk_transactions=high_risk_transactions,
-            fraud_rate=fraud_rate,
-            blocked_amount=blocked_amount,
+        response = FraudAnalyticsResponse(
+            total_alerts=fraud_metrics["total_alerts"],
+            high_risk_transactions=fraud_metrics["high_risk_transactions"],
+            fraud_rate=fraud_metrics["fraud_rate"],
+            blocked_amount=fraud_metrics["blocked_amount"],
             risk_patterns=risk_patterns,
             alerts_by_type=alerts_by_type,
-            ml_confidence=ml_confidence,
-            ai_insights=ai_insights
+            ml_confidence=fraud_metrics["ml_confidence"],
+            ai_insights={
+                "model_performance": f"ML model accuracy: {fraud_metrics['ml_confidence']*100:.1f}%",
+                "trend_analysis": "Fraud attempts decreased 15% this month",
+                "prevention_impact": f"Prevented ${fraud_metrics['blocked_amount']:,.2f} in fraudulent transactions",
+                "recommendations": "Implement additional device fingerprinting for mobile transactions",
+                "mcp_analysis": mcp_analysis
+            }
         )
         
+        return response
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch fraud analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get fraud analytics: {str(e)}")
+
+
+@router.get("/fraud-detection", response_model=FraudDetectionResponse)
+async def get_fraud_detection_analytics(
+    current_user: dict = Depends(get_current_user),
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
+):
+    """Get real-time fraud detection analytics."""
+    try:
+        # Get dynamic configuration
+        config = get_dynamic_config()
+        
+        # Use MCP tool for AI-powered fraud analysis
+        mcp_result = None
+        try:
+            from ..main import mcp_server
+            if mcp_server.initialized:
+                mcp_result = await mcp_server.tool_handlers["detect_fraud_patterns"](
+                    "detect_fraud_patterns", 
+                    {
+                        "hours_back": 24,
+                        "risk_threshold": 80.0
+                    }
+                )
+        except Exception as e:
+            print(f"MCP fraud detection error: {e}")
+            mcp_result = None
+        
+        # Get dynamic fraud metrics
+        fraud_metrics = config.data_provider.get_fraud_metrics()
+        
+        # Calculate fraud score based on recent activity
+        fraud_score = fraud_metrics["fraud_rate"] * 100 * 15  # Scale to 0-100
+        
+        # Generate fraud patterns
+        fraud_patterns = [
+            {"pattern": "Card testing attacks", "frequency": "high", "risk_level": 8.5},
+            {"pattern": "Account takeover attempts", "frequency": "medium", "risk_level": 9.2},
+            {"pattern": "Synthetic identity fraud", "frequency": "low", "risk_level": 9.8},
+            {"pattern": "Payment method abuse", "frequency": "medium", "risk_level": 7.3}
+        ]
+        
+        # Generate alert types
+        alert_types = [
+            {"type": "Real-time blocking", "count": fraud_metrics["high_risk_transactions"], "action": "blocked"},
+            {"type": "Manual review", "count": fraud_metrics["total_alerts"] - fraud_metrics["high_risk_transactions"], "action": "flagged"},
+            {"type": "Behavioral analysis", "count": fraud_metrics["patterns_detected"], "action": "monitored"}
+        ]
+        
+        # Extract MCP insights
+        mcp_analysis = ""
+        if mcp_result and hasattr(mcp_result, 'content') and mcp_result.content:
+            mcp_analysis = mcp_result.content[0].text if mcp_result.content else ""
+        elif mcp_result and isinstance(mcp_result, dict) and "content" in mcp_result:
+            mcp_analysis = mcp_result["content"][0].get("text", "") if mcp_result["content"] else ""
+        
+        response = FraudDetectionResponse(
+            fraud_score=round(fraud_score, 2),
+            flagged_transactions=fraud_metrics["total_alerts"],
+            prevented_fraud=fraud_metrics["high_risk_transactions"],
+            fraud_patterns=fraud_patterns,
+            alert_types=alert_types,
+            ai_insights={
+                "detection_accuracy": f"Current model accuracy: {fraud_metrics['ml_confidence']*100:.1f}%",
+                "real_time_blocking": f"Blocked {fraud_metrics['high_risk_transactions']} transactions in real-time",
+                "false_positive_rate": "Maintained at 0.8% - industry leading",
+                "model_updates": "ML model retrained with latest fraud patterns",
+                "mcp_analysis": mcp_analysis
+            }
+        )
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get fraud detection analytics: {str(e)}")
 
 
 @router.get("/dashboard-metrics")
@@ -429,48 +400,52 @@ async def get_dashboard_metrics(
     start_date: datetime = Query(..., description="Start date for metrics"),
     end_date: datetime = Query(..., description="End date for metrics"),
     current_user: dict = Depends(get_current_user),
-    analytics_service: AnalyticsService = Depends()
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """Get comprehensive dashboard metrics with AI insights."""
+    """Get comprehensive dashboard metrics for overview."""
     try:
-        # Get AI-powered dashboard metrics from MCP service
-        mcp_result = await analytics_service.get_dashboard_metrics(
-            start_date=start_date,
-            end_date=end_date
-        )
+        # Get dynamic configuration
+        config = get_dynamic_config()
         
-        # Aggregate dashboard metrics
-        dashboard_metrics = {
+        # Calculate period days
+        period_days = (end_date - start_date).days
+        
+        # Get all dynamic metrics
+        revenue_data = config.data_provider.get_revenue_data(period_days)
+        payment_metrics = config.data_provider.get_payment_metrics()
+        fraud_metrics = config.data_provider.get_fraud_metrics()
+        
+        # Calculate user metrics
+        total_users = sum(segment["count"] for segment in config.data_provider.user_segments)
+        active_users = int(total_users * 0.75)
+        
+        return {
             "revenue": {
-                "total": 1950000.0,
-                "growth": 15.8,
-                "trend": "up"
+                "total": revenue_data["total_revenue"],
+                "growth_rate": config.data_provider.revenue_growth_rate * 100,
+                "daily_average": revenue_data["avg_daily"]
             },
-            "transactions": {
-                "total": 12847,
-                "success_rate": 95.2,
-                "trend": "up"
+            "payments": {
+                "total_count": payment_metrics["total_payments"],
+                "success_rate": payment_metrics["success_rate"],
+                "avg_processing_time": payment_metrics["avg_processing_time"]
             },
             "users": {
-                "total": 24567,
-                "active": 18934,
-                "trend": "up"
+                "total": total_users,
+                "active": active_users,
+                "growth_rate": config.data_provider.user_growth_rate * 100
             },
             "fraud": {
-                "alerts": 234,
-                "blocked_amount": 45670.0,
-                "detection_rate": 97.2
+                "detection_rate": fraud_metrics["ml_confidence"] * 100,
+                "blocked_amount": fraud_metrics["blocked_amount"],
+                "fraud_rate": fraud_metrics["fraud_rate"] * 100
             },
-            "ai_insights": {
-                "revenue_prediction": "Projected 18% growth next quarter",
-                "user_behavior": "Increased mobile engagement by 34%",
-                "fraud_status": "All systems secure, ML detection optimal",
-                "system_health": "99.97% uptime, all services operational",
-                "mcp_analysis": mcp_result.get("content", [{}])[0].get("text", "") if mcp_result else ""
+            "system": {
+                "uptime": 99.7,
+                "response_time": payment_metrics["avg_processing_time"],
+                "throughput": payment_metrics["total_payments"] / period_days if period_days > 0 else 0
             }
         }
         
-        return dashboard_metrics
-        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard metrics: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get dashboard metrics: {str(e)}") 

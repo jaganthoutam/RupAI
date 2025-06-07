@@ -31,7 +31,7 @@ import toast from 'react-hot-toast';
 import { PaymentMethod, CreatePaymentRequest } from '../../types/payment';
 import PaymentService from '../../services/paymentService';
 
-// Validation schema
+// Validation schema with proper typing
 const schema = yup.object({
   amount: yup
     .number()
@@ -43,14 +43,15 @@ const schema = yup.object({
     .required('Currency is required')
     .oneOf(['USD', 'EUR', 'GBP', 'INR', 'JPY'], 'Invalid currency'),
   method: yup
-    .string()
+    .mixed<PaymentMethod>()
     .required('Payment method is required')
     .oneOf(Object.values(PaymentMethod), 'Invalid payment method'),
   customer_id: yup
     .string()
     .required('Customer ID is required')
     .min(3, 'Customer ID must be at least 3 characters'),
-  description: yup.string().max(255, 'Description too long'),
+  description: yup.string().optional(),
+  metadata: yup.object().optional(),
 });
 
 interface PaymentFormProps {
@@ -67,7 +68,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onSuccess, onError }) => {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<CreatePaymentRequest>({
+  } = useForm({
     resolver: yupResolver(schema),
     defaultValues: {
       amount: 0,
@@ -75,6 +76,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onSuccess, onError }) => {
       method: PaymentMethod.CARD,
       customer_id: '',
       description: '',
+      metadata: {},
     },
   });
 
@@ -104,12 +106,22 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ onSuccess, onError }) => {
     return symbols[currency] || currency;
   };
 
-  const onSubmit = async (data: CreatePaymentRequest) => {
+  const onSubmit = async (data: any) => {
     setLoading(true);
     setSubmitError(null);
 
     try {
-      const response = await PaymentService.createPayment(data);
+      // Transform data to match CreatePaymentRequest
+      const paymentData: CreatePaymentRequest = {
+        amount: data.amount,
+        currency: data.currency,
+        method: data.method,
+        customer_id: data.customer_id,
+        description: data.description || undefined,
+        metadata: data.metadata || undefined,
+      };
+
+      const response = await PaymentService.createPayment(paymentData);
       
       if (response.success) {
         toast.success('Payment created successfully!');

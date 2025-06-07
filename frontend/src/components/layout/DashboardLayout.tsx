@@ -39,6 +39,7 @@ import {
   AttachMoney,
   AccountBalanceWallet,
   SmartToy as AIIcon,
+  Receipt,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -162,6 +163,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       icon: <AuditIcon />,
       path: '/audit/logs',
       permission: 'audit.read',
+    },
+    {
+      text: 'User Management',
+      icon: <Person />,
+      path: '/users',
+      permission: 'users.read',
+    },
+    {
+      text: 'Subscription Management',
+      icon: <Receipt />,
+      path: '/subscriptions',
+      permission: 'subscriptions.read',
     },
     {
       text: 'Settings',

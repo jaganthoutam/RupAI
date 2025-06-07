@@ -20,6 +20,7 @@ from app.mcp.tools.payments import PaymentTools
 from app.mcp.tools.wallets import WalletTools  
 from app.mcp.tools.subscriptions import SubscriptionTools
 from app.mcp.tools.compliance import ComplianceTools
+from app.mcp.tools.analytics_tools import AnalyticsTools
 from app.mcp.schemas import (
     MCPRequest, MCPResponse, MCPError, ToolCall, ToolResult,
     InitializeRequest, InitializeResponse, ListToolsRequest, ListToolsResponse,
@@ -87,6 +88,7 @@ class MCPServer:
         self.wallet_tools: Optional[WalletTools] = None
         self.subscription_tools: Optional[SubscriptionTools] = None
         self.compliance_tools: Optional[ComplianceTools] = None
+        self.analytics_tools: Optional[AnalyticsTools] = None
         
         # State management
         self.initialized = False
@@ -142,6 +144,14 @@ class MCPServer:
             )
             await self.compliance_tools.initialize()
             
+            self.analytics_tools = AnalyticsTools(
+                database=self.database,
+                redis_client=self.redis_client,
+                audit_service=self.audit_service,
+                metrics_collector=self.metrics_collector
+            )
+            await self.analytics_tools.initialize()
+            
             # Register all tools
             await self._register_tools()
             
@@ -193,6 +203,13 @@ class MCPServer:
             logger.debug(f"Registering compliance tool {tool_name}, type: {type(tool_def)}")
             self.tools[tool_name] = tool_def
             self.tool_handlers[tool_name] = self.compliance_tools.handle_tool_call
+        
+        # Analytics tools
+        analytics_tools = await self.analytics_tools.get_tool_definitions()
+        for tool_name, tool_def in analytics_tools.items():
+            logger.debug(f"Registering analytics tool {tool_name}, type: {type(tool_def)}")
+            self.tools[tool_name] = tool_def
+            self.tool_handlers[tool_name] = self.analytics_tools.handle_tool_call
         
         logger.info("Registered %d MCP tools", len(self.tools))
     

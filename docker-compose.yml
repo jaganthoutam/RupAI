@@ -109,73 +109,55 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: Dockerfile  
-      target: ${BUILD_TARGET:-development}
+      target: ${BUILD_TARGET:-production}
     container_name: mcp-payments-celery-worker
     restart: unless-stopped
-    command: >
-      sh -c "
-        if [ \"$$ENV\" = \"development\" ]; then
-          echo 'Starting Celery worker in development mode with auto-reload...'
-          watchmedo auto-restart --directory=/app/app --pattern='*.py' --recursive -- celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
-        else
-          echo 'Starting Celery worker in production mode...'
-          celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
-        fi
-      "
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
-      - ENV=${ENV:-development}
-      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - ENV=${ENV:-production}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    networks:
+      - payments-network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      # Development: Mount source code for live reload
-      - ./app:/app/app:rw
-      - ./logs:/app/logs:rw
-    networks:
-      - payments-network
 
-  # Celery Beat Scheduler
+  # Celery Beat Scheduler for Periodic Tasks
   celery-beat:
     build:
       context: .
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
+      target: ${BUILD_TARGET:-production}
     container_name: mcp-payments-celery-beat
     restart: unless-stopped
-    command: >
-      sh -c "
-        if [ \"$$ENV\" = \"development\" ]; then
-          echo 'Starting Celery beat in development mode...'
-          celery -A app.tasks.celery_app beat --loglevel=info
-        else
-          echo 'Starting Celery beat in production mode...'
-          celery -A app.tasks.celery_app beat --loglevel=info
-        fi
-      "
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=info", "--scheduler=redbeat.RedBeatScheduler"]
     environment:
-      - ENV=${ENV:-development}
+      - ENV=${ENV:-production}
       - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-32-chars}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-change-in-production-32-chars}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+    networks:
+      - payments-network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      # Development: Mount source code for live reload
-      - ./app:/app/app:rw
-      - ./logs:/app/logs:rw
-    networks:
-      - payments-network
+      mcp-payments:
+        condition: service_healthy
 
   # Frontend Dashboard
   frontend:

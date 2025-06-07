@@ -67,6 +67,13 @@ class CreateUserRequest(BaseModel):
     permissions: list = []
 
 
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+    phone: Optional[str] = None
+
+
 async def log_login_attempt(
     email: str, 
     success: bool, 
@@ -184,6 +191,69 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed due to system error"
+        )
+
+
+@router.post("/register", response_model=LoginResponse)
+async def register(
+    request: Request,
+    register_data: RegisterRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Public customer registration endpoint"""
+    ip_address = get_client_ip(request)
+    user_agent = get_user_agent(request)
+    
+    try:
+        # Check if user already exists
+        result = await db.execute(select(User).filter(User.email == register_data.email))
+        existing_user = result.scalar_one_or_none()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this email already exists"
+            )
+        
+        # Create new user
+        new_user = User(
+            email=register_data.email,
+            name=register_data.name,
+            role="user",  # Default role for customers
+            permissions=[],  # Default permissions
+            is_active=True,
+            is_verified=True  # Auto-verify for demo purposes
+        )
+        new_user.set_password(register_data.password)
+        
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        
+        # Create tokens for immediate login
+        access_token = jwt_service.create_access_token(new_user)
+        refresh_token = await jwt_service.create_refresh_token(
+            new_user, db, user_agent, ip_address
+        )
+        
+        await log_login_attempt(
+            register_data.email, True, ip_address, user_agent, None, db
+        )
+        
+        logger.info(f"New user registered: {new_user.email}")
+        
+        return LoginResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=new_user.to_dict()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed due to system error"
         )
 
 

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.services.compliance_service import ComplianceService
+from app.services import get_compliance_service
 from app.mcp.server import MCPServer
 from app.db.dependencies import get_database
 
@@ -54,7 +55,7 @@ async def get_audit_logs(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=100, description="Items per page"),
     current_user: dict = Depends(get_current_user),
-    compliance_service: ComplianceService = Depends()
+    compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """Get audit logs with AI-powered risk analysis."""
     try:
@@ -129,7 +130,7 @@ async def export_audit_logs(
     entity_type: Optional[str] = None,
     action_type: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
-    compliance_service: ComplianceService = Depends()
+    compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """Export audit logs with AI-powered compliance validation."""
     try:
@@ -192,7 +193,7 @@ async def generate_compliance_report(
     end_date: datetime,
     include_pii: bool = False,
     current_user: dict = Depends(get_current_user),
-    compliance_service: ComplianceService = Depends()
+    compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """Generate compliance report with AI-powered analysis."""
     try:
@@ -252,7 +253,7 @@ async def generate_compliance_report(
 @router.get("/pci-validation")
 async def validate_pci_compliance(
     current_user: dict = Depends(get_current_user),
-    compliance_service: ComplianceService = Depends()
+    compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """Validate PCI DSS compliance with AI assessment."""
     try:
@@ -338,7 +339,7 @@ async def get_compliance_reports(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=50, description="Items per page"),
     current_user: dict = Depends(get_current_user),
-    compliance_service: ComplianceService = Depends()
+    compliance_service: ComplianceService = Depends(get_compliance_service)
 ):
     """Get compliance reports with AI insights."""
     try:

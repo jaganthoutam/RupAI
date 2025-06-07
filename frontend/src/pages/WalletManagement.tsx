@@ -37,6 +37,7 @@ import {
   Fab,
   Menu,
   Divider,
+  CircularProgress,
 } from '@mui/material';
 import {
   AccountBalance,
@@ -66,6 +67,7 @@ import numeral from 'numeral';
 // Services
 import { walletService } from '../services/walletService';
 import { mcpService } from '../services/mcpService';
+import { ApiService } from '../services/apiService';
 
 // Types
 interface Wallet {
@@ -123,6 +125,10 @@ const WalletManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [totalWallets, setTotalWallets] = useState(0);
 
   // Form states
   const [walletForm, setWalletForm] = useState({
@@ -148,60 +154,37 @@ const WalletManagement: React.FC = () => {
 
   const queryClient = useQueryClient();
 
-  // Mock data for wallets since service doesn't exist yet
-  const walletsData = {
-    data: [
-      {
-        id: 'wallet_123456789',
-        customer_id: 'cust_001',
-        currency: 'USD',
-        balance: 1250.50,
-        available_balance: 1200.50,
-        pending_balance: 50.00,
-        status: 'active' as const,
-        created_at: '2024-01-15T10:00:00Z',
-        updated_at: '2024-01-15T15:30:00Z',
-      },
-      {
-        id: 'wallet_987654321',
-        customer_id: 'cust_002',
-        currency: 'EUR',
-        balance: 890.75,
-        available_balance: 890.75,
-        pending_balance: 0.00,
-        status: 'active' as const,
-        created_at: '2024-01-10T14:20:00Z',
-        updated_at: '2024-01-15T12:10:00Z',
-      },
-    ],
-    total: 2,
+  useEffect(() => {
+    loadWallets();
+    loadTransactions();
+  }, [page, rowsPerPage]);
+
+  const loadWallets = async () => {
+    setLoading(true);
+    try {
+      const walletsData = await ApiService.getWallets(page + 1, rowsPerPage);
+      setWallets(walletsData || []);
+      setTotalWallets(walletsData?.length || 0);
+    } catch (error) {
+      console.error('Error loading wallets:', error);
+      setWallets([]);
+      setTotalWallets(0);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const transactionsData = {
-    data: [
-      {
-        id: 'txn_001',
-        wallet_id: 'wallet_123456789',
-        type: 'credit' as const,
-        amount: 500.00,
-        currency: 'USD',
-        description: 'Wallet top-up via card',
-        reference: 'ref_001',
-        status: 'completed' as const,
-        created_at: '2024-01-15T15:30:00Z',
-      },
-      {
-        id: 'txn_002',
-        wallet_id: 'wallet_123456789',
-        type: 'debit' as const,
-        amount: 25.00,
-        currency: 'USD',
-        description: 'Payment to merchant',
-        reference: 'ref_002',
-        status: 'completed' as const,
-        created_at: '2024-01-15T14:20:00Z',
-      },
-    ],
+  const loadTransactions = async () => {
+    try {
+      // Load transactions for the first wallet if available
+      if (wallets.length > 0) {
+        const transactionsData = await ApiService.getWalletTransactionHistory(wallets[0].id, 50);
+        setTransactions(transactionsData || []);
+      }
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      setTransactions([]);
+    }
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -245,13 +228,6 @@ const WalletManagement: React.FC = () => {
       currency,
     }).format(amount);
 
-  const wallets = walletsData?.data || [];
-  const totalWallets = walletsData?.total || 0;
-  const transactions = transactionsData?.data || [];
-
-  // Statistics calculations
-  const totalBalance = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
-  const activeWallets = wallets.filter(w => w.status === 'active').length;
   const currencies = [...new Set(wallets.map(w => w.currency))];
 
   return (
@@ -320,7 +296,7 @@ const WalletManagement: React.FC = () => {
                       Active Wallets
                     </Typography>
                     <Typography variant="h4">
-                      {activeWallets.toLocaleString()}
+                      {wallets.filter(w => w.status === 'active').length.toLocaleString()}
                     </Typography>
                   </Box>
                   <Avatar sx={{ bgcolor: 'success.main' }}>
@@ -339,7 +315,7 @@ const WalletManagement: React.FC = () => {
                       Total Balance (USD)
                     </Typography>
                     <Typography variant="h4">
-                      {formatCurrency(totalBalance, 'USD')}
+                      {formatCurrency(wallets.reduce((sum, wallet) => sum + wallet.balance, 0), 'USD')}
                     </Typography>
                   </Box>
                   <Avatar sx={{ bgcolor: 'info.main' }}>
@@ -478,8 +454,8 @@ const WalletManagement: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={wallet.status.toUpperCase()}
-                          color={getStatusColor(wallet.status) as any}
+                          label={(wallet.status || 'unknown').toUpperCase()}
+                          color={getStatusColor(wallet.status || 'unknown') as any}
                           size="small"
                         />
                       </TableCell>
@@ -555,9 +531,9 @@ const WalletManagement: React.FC = () => {
                                 {format(new Date(transaction.created_at), 'MMM dd, yyyy HH:mm')}
                               </Typography>
                               <Chip
-                                label={transaction.status.toUpperCase()}
+                                label={(transaction.status || 'unknown').toUpperCase()}
                                 size="small"
-                                color={transaction.status === 'completed' ? 'success' : 'warning'}
+                                color={(transaction.status || 'unknown') === 'completed' ? 'success' : 'warning'}
                               />
                             </Box>
                           }

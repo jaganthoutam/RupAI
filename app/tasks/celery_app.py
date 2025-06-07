@@ -53,6 +53,10 @@ CELERY_CONFIG: Dict[str, Any] = {
     'timezone': 'UTC',
     'enable_utc': True,
     
+    # Beat scheduler using Redis (avoid file permission issues)
+    'beat_scheduler': 'redbeat.RedBeatScheduler',
+    'redbeat_redis_url': os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1'),
+    
     # Task routing
     'task_routes': {
         'app.tasks.payment_tasks.*': {'queue': 'payments'},

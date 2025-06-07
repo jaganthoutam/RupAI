@@ -272,6 +272,41 @@ class MetricsCollector:
         except Exception as e:
             logger.error("Error updating wallet balance metric: %s", str(e))
     
+    async def record_performance(
+        self,
+        operation: str,
+        duration: float,
+        success: bool = True,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Record performance metrics for operations."""
+        try:
+            # Record operation duration
+            self.request_duration.labels(
+                method="performance",
+                endpoint=operation
+            ).observe(duration)
+            
+            # Record operation count
+            status = "success" if success else "failed"
+            self.request_counter.labels(
+                method="performance",
+                endpoint=operation,
+                status_code=status
+            ).inc()
+            
+            # Track in response times for analytics
+            self.response_times.append({
+                'timestamp': datetime.utcnow(),
+                'duration': duration,
+                'endpoint': operation,
+                'success': success,
+                'metadata': metadata or {}
+            })
+            
+        except Exception as e:
+            logger.error("Error recording performance metric: %s", str(e))
+    
     # Error Metrics
     async def record_error(
         self, 
@@ -444,4 +479,134 @@ class MetricsCollector:
             return {
                 "status": "unknown",
                 "error": str(e)
-            } 
+            }
+
+# Global instance
+metrics_collector = MetricsCollector()
+
+def log_event(event_type: str, details: Dict[str, Any] = None) -> None:
+    """
+    Log an event for monitoring purposes.
+    
+    Args:
+        event_type: Type of event (e.g., 'payment_processed', 'task_started')
+        details: Additional event details
+    """
+    try:
+        if details is None:
+            details = {}
+        
+        logger.info(f"Event: {event_type} - {details}")
+        
+        # Record as error metric if it's an error event
+        if 'error' in event_type.lower() or 'failed' in event_type.lower():
+            asyncio.create_task(metrics_collector.record_error(
+                error_type=event_type,
+                service=details.get('service', 'unknown'),
+                severity=details.get('severity', 'info')
+            ))
+    except Exception as e:
+        logger.error(f"Error logging event {event_type}: {str(e)}")
+
+def track_performance(func_or_duration=None, *, duration=None):
+    """
+    Track performance of function execution or log performance data.
+    
+    Can be used as:
+    1. A decorator: @track_performance
+    2. A decorator with duration: @track_performance(duration=5.0)
+    3. A function call: track_performance("operation", 5.0)
+    
+    Args:
+        func_or_duration: Function to decorate or duration value
+        duration: Explicit duration parameter when used as decorator
+    """
+    import functools
+    import time
+    from typing import Union, Callable, Any
+    
+    # Case 1: Used as @track_performance (without parentheses)
+    if callable(func_or_duration):
+        func = func_or_duration
+        
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                result = await func(*args, **kwargs)
+                execution_time = time.time() - start_time
+                
+                # Log performance
+                logger.info(f"Performance: {func.__name__} completed in {execution_time:.3f}s")
+                
+                # Record as performance metric
+                try:
+                    asyncio.create_task(metrics_collector.record_performance(
+                        operation=func.__name__,
+                        duration=execution_time,
+                        success=True
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to record performance metrics: {e}")
+                
+                return result
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"Performance: {func.__name__} failed in {execution_time:.3f}s - {e}")
+                
+                # Record as failed performance metric
+                try:
+                    asyncio.create_task(metrics_collector.record_performance(
+                        operation=func.__name__,
+                        duration=execution_time,
+                        success=False
+                    ))
+                except Exception:
+                    pass
+                
+                raise
+        
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                execution_time = time.time() - start_time
+                
+                logger.info(f"Performance: {func.__name__} completed in {execution_time:.3f}s")
+                return result
+            except Exception as e:
+                execution_time = time.time() - start_time
+                logger.error(f"Performance: {func.__name__} failed in {execution_time:.3f}s - {e}")
+                raise
+        
+        # Return appropriate wrapper based on function type
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+    
+    # Case 2: Used as @track_performance() or @track_performance(duration=5.0)
+    elif func_or_duration is None or isinstance(func_or_duration, (int, float)):
+        def decorator(func):
+            return track_performance(func)
+        return decorator
+    
+    # Case 3: Used as function call track_performance("operation", 5.0)
+    else:
+        operation_name = func_or_duration
+        execution_time = duration or 0.0
+        
+        try:
+            logger.info(f"Performance: {operation_name} - {execution_time:.3f}s")
+            
+            # Record as performance metric
+            asyncio.create_task(metrics_collector.record_performance(
+                operation=operation_name,
+                duration=execution_time,
+                success=True
+            ))
+        except Exception as e:
+            logger.warning(f"Failed to log performance for {operation_name}: {e}")
+        
+        return None 

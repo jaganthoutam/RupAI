@@ -23,8 +23,8 @@ logger = get_logger(__name__)
 class PaymentService:
     """Payment service with AI-powered processing capabilities."""
     
-    def __init__(self, repo: PaymentRepository, stripe: StripeClient, razorpay: RazorpayClient):
-        """Initialize payment service with minimal dependencies for API usage."""
+    def __init__(self, repo: Optional[PaymentRepository] = None, stripe: Optional[StripeClient] = None, razorpay: Optional[RazorpayClient] = None):
+        """Initialize payment service with optional dependencies for API usage."""
         self.repo = repo
         self.stripe = stripe
         self.razorpay = razorpay
@@ -141,12 +141,20 @@ class PaymentService:
             customer_id=str(customer_id),
             provider=provider,
         )
-        await self.repo.add(payment)
-        if provider == "stripe":
+        
+        # Only use repo if available
+        if self.repo:
+            await self.repo.add(payment)
+        
+        # Only use payment providers if available
+        if provider == "stripe" and self.stripe:
             await self.stripe.create_charge(payment, metadata)
-        else:
+        elif provider == "razorpay" and self.razorpay:
             await self.razorpay.create_payment(payment, metadata)
+        
         return payment
 
     async def verify_payment(self, payment_id: str) -> Payment | None:
-        return await self.repo.get(payment_id)
+        if self.repo:
+            return await self.repo.get(payment_id)
+        return None

@@ -124,7 +124,7 @@ export class PaymentService {
    */
   static async getPayment(paymentId: string): Promise<Payment> {
     try {
-      const response: AxiosResponse<Payment> = await api.get(`/payments/${paymentId}`);
+      const response: AxiosResponse<Payment> = await api.get(`/api/v1/payments/${paymentId}`);
       return response.data;
     } catch (error: any) {
       console.error('Get payment error:', error);
@@ -145,8 +145,17 @@ export class PaymentService {
     end_date?: string;
   }): Promise<{payments: Payment[]; total: number; page: number; limit: number}> {
     try {
-      const response = await api.get('/payments', { params });
-      return response.data;
+      const response = await api.get('/api/v1/payments', { params });
+      // The API returns an array directly, not an object with payments field
+      const payments = Array.isArray(response.data) ? response.data : [];
+      
+      // Since the API doesn't return pagination metadata, we'll simulate it
+      return {
+        payments,
+        total: payments.length, // This is an approximation since the API doesn't provide total count
+        page: params?.page || 1,
+        limit: params?.limit || 50
+      };
     } catch (error: any) {
       console.error('Get payments error:', error);
       throw new Error(error.response?.data?.message || 'Failed to fetch payments');
@@ -162,7 +171,7 @@ export class PaymentService {
     granularity?: 'hourly' | 'daily' | 'weekly' | 'monthly';
   }): Promise<PaymentMetrics> {
     try {
-      const response: AxiosResponse<PaymentMetrics> = await api.get('/analytics/payments', { params });
+      const response: AxiosResponse<PaymentMetrics> = await api.get('/api/v1/analytics/payments', { params });
       return response.data;
     } catch (error: any) {
       console.error('Get payment metrics error:', error);
@@ -175,7 +184,7 @@ export class PaymentService {
    */
   static async getRecentTransactions(limit: number = 10): Promise<Payment[]> {
     try {
-      const response = await api.get('/payments/recent', { params: { limit } });
+      const response = await api.get('/api/v1/payments/recent', { params: { limit } });
       return response.data;
     } catch (error: any) {
       console.error('Get recent transactions error:', error);

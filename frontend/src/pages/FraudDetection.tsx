@@ -206,12 +206,12 @@ const FraudDetection: React.FC = () => {
           userId: `user_${index + 1}`,
           userName: `User ${index + 1}`,
           riskScore: Math.random() * 100,
-          riskLevel: alert.severity as 'low' | 'medium' | 'high' | 'critical',
-          fraudType: alert.type,
+          riskLevel: (alert.severity as 'low' | 'medium' | 'high' | 'critical') || 'medium',
+          fraudType: alert.type || 'Unknown',
           amount: Math.random() * 5000,
           timestamp: new Date().toISOString(),
           status: 'pending' as const,
-          reasons: [`${alert.type} detected`, 'System automated alert'],
+          reasons: [`${alert.type || 'Unknown'} detected`, 'System automated alert'],
         })) || []);
 
         setFraudTrends(Array.from({ length: 24 }, (_, i) => ({
@@ -513,7 +513,7 @@ const FraudDetection: React.FC = () => {
                                   {alert.riskScore}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  {alert.riskLevel.toUpperCase()}
+                                  {(alert.riskLevel || 'unknown').toUpperCase()}
                                 </Typography>
                               </Box>
                             </Box>

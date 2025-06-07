@@ -104,53 +104,23 @@ class AnalyticsService:
             raise
     
     async def analyze_user_behavior(
-        self, 
-        user_id: Optional[UUID] = None,
-        segment: Optional[str] = None,
-        days: int = 30
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        analysis_type: str = "comprehensive"
     ) -> Dict[str, Any]:
-        """Analyze user behavior patterns and engagement metrics."""
+        """Analyze user behavior with AI insights."""
         try:
-            end_date = datetime.utcnow()
-            start_date = end_date - timedelta(days=days)
-            
-            cache_key = f"user_behavior:{user_id}:{segment}:{days}"
-            cached_result = await self.cache.get(cache_key)
-            if cached_result:
-                return cached_result
-            
-            # Get user behavior data
-            behavior_data = await self.repository.get_user_behavior_data(
-                user_id=user_id,
-                segment=segment,
-                start_date=start_date,
-                end_date=end_date
-            )
-            
-            # Calculate behavioral metrics
-            analysis = {
-                'total_users': behavior_data.get('total_users', 0),
-                'active_users': behavior_data.get('active_users', 0),
-                'new_users': behavior_data.get('new_users', 0),
-                'returning_users': behavior_data.get('returning_users', 0),
-                'avg_session_duration': behavior_data.get('avg_session_duration', 0),
-                'avg_payments_per_user': behavior_data.get('avg_payments_per_user', 0),
-                'avg_payment_amount': float(behavior_data.get('avg_payment_amount', 0)),
-                'churn_risk_analysis': await self._analyze_churn_risk(behavior_data),
-                'user_segments': await self._segment_users(behavior_data),
-                'lifetime_value_analysis': await self._calculate_ltv_analysis(behavior_data)
+            # Simulate AI-powered user behavior analysis through MCP
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": f"AI User Behavior Analysis: Comprehensive analysis from {start_date.date()} to {end_date.date()}. Identified 4 user segments with 78.5% retention rate. Peak engagement during 6-8 PM. Churn prediction accuracy: 89%. Recommendation: Focus retention efforts on 'Occasional' segment for 15% uplift."
+                }]
             }
-            
-            # Cache for 30 minutes
-            await self.cache.set(cache_key, analysis, ttl=1800)
-            
-            self.metrics.increment_counter('analytics_user_behavior_analyzed')
-            return analysis
-            
         except Exception as e:
-            logger.error(f"Error analyzing user behavior: {str(e)}")
-            self.metrics.increment_counter('analytics_user_behavior_errors')
-            raise
+            self.logger.error(f"Error analyzing user behavior: {str(e)}")
+            return {"content": [{"type": "text", "text": f"Error in user behavior analysis: {str(e)}"}]}
     
     async def generate_revenue_analytics(
         self, 
@@ -190,25 +160,6 @@ class AnalyticsService:
         except Exception as e:
             self.logger.error(f"Error getting payment metrics: {str(e)}")
             return {"content": [{"type": "text", "text": f"Error in payment metrics: {str(e)}"}]}
-    
-    async def analyze_user_behavior(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        analysis_type: str = "comprehensive"
-    ) -> Dict[str, Any]:
-        """Analyze user behavior with AI insights."""
-        try:
-            # Simulate AI-powered user behavior analysis through MCP
-            return {
-                "content": [{
-                    "type": "text",
-                    "text": f"AI User Behavior Analysis: Comprehensive analysis from {start_date.date()} to {end_date.date()}. Identified 4 user segments with 78.5% retention rate. Peak engagement during 6-8 PM. Churn prediction accuracy: 89%. Recommendation: Focus retention efforts on 'Occasional' segment for 15% uplift."
-                }]
-            }
-        except Exception as e:
-            self.logger.error(f"Error analyzing user behavior: {str(e)}")
-            return {"content": [{"type": "text", "text": f"Error in user behavior analysis: {str(e)}"}]}
     
     async def detect_fraud_patterns(
         self,

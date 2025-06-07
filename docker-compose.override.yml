@@ -22,50 +22,73 @@ services:
 
   celery-worker:
     build:
-      target: development  
-    environment:
-      - ENV=development
-    volumes:
-      # Mount source code for live reload
-      - ./app:/app/app:rw
-      - ./logs:/app/logs:rw
+      context: .
+      target: development
     command: >
       sh -c "
-        echo 'Starting Celery Worker in DEVELOPMENT mode with auto-reload...'
-        watchmedo auto-restart --directory=/app/app --pattern='*.py' --recursive -- celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+        echo 'Starting Celery worker in development mode...'
+        watchmedo auto-restart --directory=./app --pattern=*.py --recursive -- celery -A app.tasks.celery_app worker --loglevel=info
       "
+    volumes:
+      - ./app:/app/app:rw
+    environment:
+      - ENV=development
+      - NODE_ENV=development
+      - DEBUG=true
+      - JWT_SECRET_KEY=dev_jwt_secret_key_change_in_production_32_chars_long
+      - ENCRYPTION_KEY=dev_encryption_key_change_in_production_32_chars_long
+    depends_on:
+      - postgres
+      - redis
 
   celery-beat:
     build:
+      context: .
       target: development
-    environment:
-      - ENV=development  
+    command: >
+      sh -c "
+        if [ '$ENV' = 'development' ]; then
+          echo 'Starting Celery beat in development mode...'
+          celery -A app.tasks.celery_app beat --loglevel=info
+        else
+          echo 'Starting Celery beat in production mode...'
+          celery -A app.tasks.celery_app beat --loglevel=warning
+        fi
+      "
     volumes:
-      # Mount source code for live reload
       - ./app:/app/app:rw
-      - ./logs:/app/logs:rw
+    environment:
+      - ENV=development
+      - NODE_ENV=development
+      - DEBUG=true
+      - JWT_SECRET_KEY=dev_jwt_secret_key_change_in_production_32_chars_long
+      - ENCRYPTION_KEY=dev_encryption_key_change_in_production_32_chars_long
+    depends_on:
+      - postgres
+      - redis
 
   frontend:
     build:
+      context: ./frontend
       target: development
-    environment:
-      - NODE_ENV=development
-      - CHOKIDAR_USEPOLLING=true
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_ENVIRONMENT=development
-    volumes:
-      # Mount source code for hot reload
-      - ./frontend/src:/app/src:rw
-      - ./frontend/public:/app/public:rw
-      - ./frontend/package.json:/app/package.json:ro
-      - ./frontend/package-lock.json:/app/package-lock.json:ro
-      # Exclude node_modules to avoid conflicts  
-      - /app/node_modules
+    user: "0:0"  # Run as root in development to avoid permission issues
     command: >
       sh -c "
         echo 'Starting React Frontend in DEVELOPMENT mode with hot reload...'
+        rm -rf /app/node_modules/.vite
         npm start
       "
+    volumes:
+      - ./frontend:/app:delegated
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mcp-payments
 
   # Development tools
   # Add PGAdmin for database management in development

@@ -58,6 +58,7 @@ psutil>=5.9.6
 
 # Background Tasks
 celery>=5.3.4
+celery-redbeat>=2.0.0
 flower>=2.0.1
 
 # Data Science & Analytics

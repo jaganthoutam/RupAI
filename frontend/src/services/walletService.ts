@@ -51,7 +51,7 @@ export class WalletService {
    */
   static async getWallets(filters: WalletFilters): Promise<WalletResponse> {
     try {
-      const response: AxiosResponse<WalletResponse> = await api.get('/wallets', {
+      const response: AxiosResponse<WalletResponse> = await api.get('/api/v1/wallets', {
         params: filters,
       });
       return response.data;
@@ -66,7 +66,7 @@ export class WalletService {
    */
   static async getWallet(walletId: string): Promise<Wallet> {
     try {
-      const response: AxiosResponse<Wallet> = await api.get(`/wallets/${walletId}`);
+      const response: AxiosResponse<Wallet> = await api.get(`/api/v1/wallets/${walletId}`);
       return response.data;
     } catch (error: any) {
       console.error('Get wallet error:', error);
@@ -83,7 +83,7 @@ export class WalletService {
     initial_balance?: number;
   }): Promise<Wallet> {
     try {
-      const response: AxiosResponse<Wallet> = await api.post('/wallets', walletData);
+      const response: AxiosResponse<Wallet> = await api.post('/api/v1/wallets', walletData);
       return response.data;
     } catch (error: any) {
       console.error('Create wallet error:', error);
@@ -96,7 +96,7 @@ export class WalletService {
    */
   static async updateWallet(walletId: string, updates: Partial<Wallet>): Promise<Wallet> {
     try {
-      const response: AxiosResponse<Wallet> = await api.put(`/wallets/${walletId}`, updates);
+      const response: AxiosResponse<Wallet> = await api.put(`/api/v1/wallets/${walletId}`, updates);
       return response.data;
     } catch (error: any) {
       console.error('Update wallet error:', error);
@@ -115,7 +115,7 @@ export class WalletService {
     description?: string;
   }): Promise<any> {
     try {
-      const response: AxiosResponse<any> = await api.post('/wallets/transfer', transferData);
+      const response: AxiosResponse<any> = await api.post('/api/v1/wallets/transfer', transferData);
       return response.data;
     } catch (error: any) {
       console.error('Transfer funds error:', error);
@@ -133,7 +133,7 @@ export class WalletService {
     description?: string;
   }): Promise<any> {
     try {
-      const response: AxiosResponse<any> = await api.post('/wallets/top-up', topUpData);
+      const response: AxiosResponse<any> = await api.post('/api/v1/wallets/top-up', topUpData);
       return response.data;
     } catch (error: any) {
       console.error('Top up wallet error:', error);
@@ -150,7 +150,7 @@ export class WalletService {
     type?: string;
   }): Promise<any> {
     try {
-      const response: AxiosResponse<any> = await api.get(`/wallets/${walletId}/transactions`, {
+      const response: AxiosResponse<any> = await api.get(`/api/v1/wallets/${walletId}/transactions`, {
         params: filters,
       });
       return response.data;

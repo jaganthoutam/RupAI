@@ -1,0 +1,325 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: mcp-payments-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=payments_db
+      - POSTGRES_USER=payments
+      - POSTGRES_PASSWORD=payments_secure_pass
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments -d payments_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: mcp-payments-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Main MCP Payments Backend
+  mcp-payments:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-development}
+    container_name: mcp-payments-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "9090:9090"  # Prometheus metrics
+    environment:
+      - ENV=${ENV:-development}
+      - DEBUG=${DEBUG:-true}
+      - ENABLE_AUTHENTICATION=${ENABLE_AUTHENTICATION:-false}
+      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-32-chars}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-change-in-production-32-chars}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+      - ENABLE_ANALYTICS=${ENABLE_ANALYTICS:-true}
+      - ENABLE_AUDIT_LOGGING=${ENABLE_AUDIT_LOGGING:-true}
+      - ENABLE_RATE_LIMITING=${ENABLE_RATE_LIMITING:-true}
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app:rw
+      - ./logs:/app/logs:rw
+      - ./data/uploads:/app/uploads:rw
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: >
+      sh -c "
+        if [ \"$$ENV\" = \"development\" ]; then
+          echo 'Starting MCP backend in development mode with auto-reload...'
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+        else
+          echo 'Starting MCP backend in production mode...'
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+        fi
+      "
+
+  # 🧠 Groq AI Integration Service
+  groq-ai:
+    build:
+      context: .
+      dockerfile: production/Dockerfile.groq
+    container_name: mcp-payments-groq-ai
+    restart: unless-stopped
+    ports:
+      - "8001:8001"  # Groq AI FastAPI server
+    environment:
+      - ENV=${ENV:-development}
+      - DEBUG=${DEBUG:-true}
+      # Groq Configuration
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.1-8b-instant}
+      - GROQ_TIMEOUT=${GROQ_TIMEOUT:-30.0}
+      - GROQ_MAX_TOKENS=${GROQ_MAX_TOKENS:-500}
+      - GROQ_TEMPERATURE=${GROQ_TEMPERATURE:-0.1}
+      # MCP Integration
+      - MCP_ENDPOINT=http://mcp-payments:8000/mcp
+      # FastAPI Configuration
+      - HOST=0.0.0.0
+      - PORT=8001
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - WORKERS=${GROQ_WORKERS:-2}
+      # Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-32-chars}
+    depends_on:
+      mcp-payments:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./production:/app/production:rw
+      - ./logs:/app/logs:rw
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    command: >
+      sh -c "
+        echo 'Starting Groq AI service...'
+        if [ \"$$ENV\" = \"development\" ]; then
+          echo 'Development mode: auto-reload enabled'
+          uvicorn production.groq_fastapi_server:app --host 0.0.0.0 --port 8001 --reload
+        else
+          echo 'Production mode: $$WORKERS workers'
+          uvicorn production.groq_fastapi_server:app --host 0.0.0.0 --port 8001 --workers $$WORKERS
+        fi
+      "
+
+  # Celery Worker for Background Tasks
+  celery-worker:
+    build:
+      context: .
+      target: ${BUILD_TARGET:-production}
+    container_name: mcp-payments-celery-worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      - ENV=${ENV:-production}
+      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-32-chars}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-change-in-production-32-chars}
+    networks:
+      - payments-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Beat Scheduler for Periodic Tasks
+  celery-beat:
+    build:
+      context: .
+      target: ${BUILD_TARGET:-production}
+    container_name: mcp-payments-celery-beat
+    restart: unless-stopped
+    command: ["celery", "-A", "app.tasks.celery_app", "beat", "--loglevel=info", "--scheduler=redbeat.RedBeatScheduler"]
+    environment:
+      - ENV=${ENV:-production}
+      - DATABASE_URL=postgresql+asyncpg://payments:payments_secure_pass@postgres:5432/payments_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-32-chars}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-change-in-production-32-chars}
+    networks:
+      - payments-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mcp-payments:
+        condition: service_healthy
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: mcp-payments-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
+      - REACT_APP_GROQ_API_URL=${REACT_APP_GROQ_API_URL:-http://localhost:8001}
+      - REACT_APP_ENVIRONMENT=${REACT_APP_ENVIRONMENT:-development}
+      - CHOKIDAR_USEPOLLING=true
+      - TSC_COMPILE_ON_ERROR=true
+      - SKIP_PREFLIGHT_CHECK=true
+    depends_on:
+      - mcp-payments
+      - groq-ai
+    networks:
+      - payments-network
+    command: ["sh", "-c", "npm start -- --host 0.0.0.0 --port 3000"]
+
+  # 🔍 Monitoring Stack (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mcp-payments-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - payments-network
+    depends_on:
+      - mcp-payments
+      - groq-ai
+    profiles:
+      - monitoring
+
+  # 📊 Grafana Dashboard (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mcp-payments-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - payments-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+  # 🐰 RabbitMQ Message Broker (Optional)
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: mcp-payments-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-payments}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-payments123}
+      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_VHOST:-payments}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - payments-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - advanced
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  payments-network:
+    driver: bridge
+    name: mcp-payments-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

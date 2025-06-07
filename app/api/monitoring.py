@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.services.monitoring_service import MonitoringService
+from app.services import get_monitoring_service
 from app.mcp.server import MCPServer
 from app.db.dependencies import get_database
 
@@ -47,7 +48,7 @@ class AlertResponse(BaseModel):
 @router.get("/system-metrics", response_model=SystemMetricsResponse)
 async def get_system_metrics(
     current_user: dict = Depends(get_current_user),
-    monitoring_service: MonitoringService = Depends()
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
     """Get comprehensive system metrics with AI analysis."""
     try:
@@ -141,7 +142,7 @@ async def get_system_metrics(
 @router.get("/system-status")
 async def get_system_status(
     current_user: dict = Depends(get_current_user),
-    monitoring_service: MonitoringService = Depends()
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
     """Get overall system status with AI health assessment."""
     try:
@@ -203,7 +204,7 @@ async def get_active_alerts(
     status: Optional[str] = Query("active", description="Filter by status"),
     limit: int = Query(50, ge=1, le=100, description="Number of alerts"),
     current_user: dict = Depends(get_current_user),
-    monitoring_service: MonitoringService = Depends()
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
     """Get active system alerts with AI prioritization."""
     try:
@@ -267,7 +268,7 @@ async def resolve_alert(
     alert_id: str,
     resolution_note: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
-    monitoring_service: MonitoringService = Depends()
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
     """Resolve an alert with AI validation."""
     try:
@@ -312,7 +313,7 @@ async def get_performance_metrics(
     end_date: datetime = Query(..., description="End date for metrics"),
     granularity: str = Query("hourly", description="Metrics granularity"),
     current_user: dict = Depends(get_current_user),
-    monitoring_service: MonitoringService = Depends()
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
     """Get performance metrics over time with AI analysis."""
     try:

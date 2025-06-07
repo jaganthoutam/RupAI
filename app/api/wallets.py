@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.services.wallet_service import WalletService
+from app.services import get_wallet_service
 from app.mcp.server import MCPServer
 from app.db.dependencies import get_database
 
@@ -26,6 +27,7 @@ class WalletResponse(BaseModel):
     balance: float
     available_balance: float
     pending_balance: float
+    status: str = Field(default="active", description="Wallet status")
     created_at: datetime
     updated_at: datetime
     ai_insights: Optional[Dict[str, Any]] = None
@@ -65,7 +67,7 @@ async def get_wallets(
     customer_id: Optional[str] = Query(None, description="Filter by customer ID"),
     currency: Optional[str] = Query(None, description="Filter by currency"),
     current_user: dict = Depends(get_current_user),
-    wallet_service: WalletService = Depends()
+    wallet_service: WalletService = Depends(get_wallet_service)
 ):
     """Get paginated list of wallets with AI insights."""
     try:
@@ -100,6 +102,7 @@ async def get_wallets(
                 balance=balance,
                 available_balance=available,
                 pending_balance=pending,
+                status="active" if i % 10 != 0 else "frozen" if i % 20 != 0 else "suspended",
                 created_at=datetime.now().replace(hour=9+i%12, minute=i*2%60),
                 updated_at=datetime.now().replace(hour=9+i%12, minute=i*2%60+10),
                 ai_insights={
@@ -134,7 +137,7 @@ async def get_wallets(
 async def get_wallet(
     wallet_id: str,
     current_user: dict = Depends(get_current_user),
-    wallet_service: WalletService = Depends()
+    wallet_service: WalletService = Depends(get_wallet_service)
 ):
     """Get specific wallet details with AI analysis."""
     try:
@@ -153,6 +156,7 @@ async def get_wallet(
             balance=balance,
             available_balance=available,
             pending_balance=pending,
+            status="active",
             created_at=datetime.now().replace(month=10, day=15, hour=9, minute=30),
             updated_at=datetime.now().replace(hour=16, minute=45),
             ai_insights={
@@ -206,7 +210,7 @@ async def get_wallet_balance(
     customer_id: str,
     currency: Optional[str] = Query("USD", description="Currency filter"),
     current_user: dict = Depends(get_current_user),
-    wallet_service: WalletService = Depends()
+    wallet_service: WalletService = Depends(get_wallet_service)
 ):
     """Get wallet balance for customer with AI insights."""
     try:
@@ -252,7 +256,7 @@ async def get_wallet_balance(
 async def transfer_funds(
     transfer_data: TransferRequest,
     current_user: dict = Depends(get_current_user),
-    wallet_service: WalletService = Depends()
+    wallet_service: WalletService = Depends(get_wallet_service)
 ):
     """Transfer funds between wallets with AI validation."""
     try:
@@ -303,7 +307,7 @@ async def top_up_wallet(
     wallet_id: str,
     topup_data: TopUpRequest,
     current_user: dict = Depends(get_current_user),
-    wallet_service: WalletService = Depends()
+    wallet_service: WalletService = Depends(get_wallet_service)
 ):
     """Top up wallet with AI optimization."""
     try:
@@ -355,7 +359,7 @@ async def get_wallet_transactions(
     limit: int = Query(50, ge=1, le=100, description="Number of transactions"),
     transaction_type: Optional[str] = Query(None, description="Filter by type"),
     current_user: dict = Depends(get_current_user),
-    wallet_service: WalletService = Depends()
+    wallet_service: WalletService = Depends(get_wallet_service)
 ):
     """Get wallet transaction history with AI insights."""
     try:

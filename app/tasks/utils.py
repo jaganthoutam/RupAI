@@ -43,26 +43,37 @@ def async_task(func: Callable) -> Callable:
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         """Wrapper function that runs async function in event loop"""
+        # Always create a new event loop for Celery tasks to avoid conflicts
+        # This is especially important with fork workers where loops can get corrupted
+        loop = None
         try:
-            # Get or create event loop
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # No event loop in current thread, create new one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        try:
+            # Check if there's an existing loop and if it's closed
+            try:
+                current_loop = asyncio.get_event_loop()
+                if current_loop.is_closed():
+                    raise RuntimeError("Current loop is closed")
+                loop = current_loop
+            except RuntimeError:
+                # Create a new event loop for this task
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
             # Run the async function
             return loop.run_until_complete(func(*args, **kwargs))
+            
         except Exception as e:
             logger.error(f"Async task {func.__name__} failed: {e}")
             raise
         finally:
-            # Clean up if we created the loop
-            if loop.is_running():
-                pass  # Don't close running loop
-            elif not loop.is_closed():
-                loop.close()
+            # Only close the loop if we created it and it's not running
+            try:
+                if loop and not loop.is_running() and not loop.is_closed():
+                    # Close the loop we created
+                    loop.close()
+                    # Clear the event loop from the thread
+                    asyncio.set_event_loop(None)
+            except Exception as cleanup_error:
+                logger.warning(f"Error during event loop cleanup: {cleanup_error}")
     
     return wrapper
 

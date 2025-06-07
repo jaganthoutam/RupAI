@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 class WalletService:
     """Wallet service with AI-powered management capabilities."""
     
-    def __init__(self, repo: WalletRepository) -> None:
+    def __init__(self, repo: Optional[WalletRepository] = None) -> None:
         self.repo = repo
     
     async def get_wallet_list(
@@ -135,11 +135,15 @@ class WalletService:
             return {"content": [{"type": "text", "text": f"Error in transaction history: {str(e)}"}]}
 
     async def get_balance(self, wallet_id: str) -> Wallet | None:
-        return await self.repo.get(wallet_id)
+        if self.repo:
+            return await self.repo.get(wallet_id)
+        return None
 
     async def transfer_funds(self, wallet_id: str, target_wallet: str, amount: Decimal) -> None:
-        await self.repo.update_balance(wallet_id, -float(amount))
-        await self.repo.update_balance(target_wallet, float(amount))
+        if self.repo:
+            await self.repo.update_balance(wallet_id, -float(amount))
+            await self.repo.update_balance(target_wallet, float(amount))
 
     async def top_up(self, wallet_id: str, amount: Decimal) -> None:
-        await self.repo.update_balance(wallet_id, float(amount))
+        if self.repo:
+            await self.repo.update_balance(wallet_id, float(amount))
