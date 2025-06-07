@@ -874,8 +874,8 @@ graph LR
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-org/mcp-payments.git
-cd mcp-payments
+git clone https://github.com/jaganthoutam/RupAI.git
+cd RupAI
 ```
 
 ### 2. Environment Setup
