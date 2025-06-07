@@ -1,4 +1,4 @@
-# 🚀 Enterprise MCP Payments Server with AI Integration
+# 🚀 Enterprise MCP Payments Server with AI Integration :: RupAI
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
@@ -9,7 +9,7 @@
 [![Implementation Status](https://img.shields.io/badge/Backend-100%25%20Complete-brightgreen.svg)](https://github.com)
 [![Frontend Status](https://img.shields.io/badge/Frontend-Dynamic%20APIs%20Integrated-blue.svg)](https://github.com)
 
-> **Production-ready AI-powered Model Context Protocol (MCP) server for enterprise payments processing with intelligent automation, 99.995% availability, PCI-DSS compliance, and comprehensive observability. Backend APIs are fully implemented with dynamic data generation and AI integration.**
+> **RupAI is Production-ready AI-powered Model Context Protocol (MCP) server for enterprise payments processing with intelligent automation, 99.995% availability, PCI-DSS compliance, and comprehensive observability. Backend APIs are fully implemented with dynamic data generation and AI integration.**
 
 ## 📋 Table of Contents
 
@@ -38,7 +38,7 @@
 
 ## 🎯 Overview
 
-The Enterprise MCP Payments Server is a **revolutionary AI-powered** implementation of the Model Context Protocol (MCP) v2024.1 specification, designed specifically for enterprise-grade payments processing with intelligent automation and comprehensive AI integration. It provides a comprehensive suite of payment tools, wallet management, subscription handling, compliance features, and intelligent analytics powered by advanced AI models.
+RupAI is the the Enterprise MCP Payments Server is a **revolutionary AI-powered** implementation of the Model Context Protocol (MCP) v2024.1 specification, designed specifically for enterprise-grade payments processing with intelligent automation and comprehensive AI integration. It provides a comprehensive suite of payment tools, wallet management, subscription handling, compliance features, and intelligent analytics powered by advanced AI models.
 
 ### 🎯 Key Objectives
 
