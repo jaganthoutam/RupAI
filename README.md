@@ -901,7 +901,7 @@ docker-compose up -d postgres redis rabbitmq
 sleep 10
 
 # Start MCP payments server with AI tools
-docker-compose up mcp-payments
+docker-compose up RupAI
 
 # In a new terminal, start the AI-powered frontend
 cd frontend
